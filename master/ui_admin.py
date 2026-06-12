@@ -111,7 +111,7 @@ def get_manage_clones_markup(bots, primary):
             InlineKeyboardButton("➕ Register New Token", callback_data="add_clone")
         ])
     buttons.append([
-        InlineKeyboardButton("🔙 Back", callback_data="bot_config")
+        InlineKeyboardButton("🔙 Back", callback_data="admin_settings")
     ])
     return InlineKeyboardMarkup(buttons)
 

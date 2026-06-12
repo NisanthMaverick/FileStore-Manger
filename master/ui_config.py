@@ -45,9 +45,6 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
         ],
         [
             InlineKeyboardButton("🔘 Custom Buttons Manager", callback_data="btn_mgr"),
-            InlineKeyboardButton("🤖 Deploy & Run Clone Bots", callback_data="manage_clones")
-        ],
-        [
             InlineKeyboardButton("⏱ File Auto Delete Timer", callback_data="auto_delete_menu")
         ],
         [
