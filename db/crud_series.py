@@ -151,7 +151,7 @@ def _list_sections_sync(series_id: int, parent_id: int = None):
             query = query.filter(SeriesSection.parent_id == None)
         else:
             query = query.filter(SeriesSection.parent_id == parent_id)
-        sections = query.order_by(SeriesSection.name).all()
+        sections = query.order_by(SeriesSection.id).all()
         return [{
             "id": s.id,
             "name": s.name,
