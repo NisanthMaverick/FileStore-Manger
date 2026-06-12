@@ -1,0 +1,25 @@
+from pyrogram import Client, filters
+from clone_helpers import (
+    ACTIVE_CLONES, check_user_subscribed, log_new_user_start,
+    log_download_action, handle_auto_delete_if_enabled
+)
+from clone_tree import start_clone_bot, stop_clone_bot, show_user_tree
+from clone_handlers import clone_start_handler, clone_id_handler, clone_explore_handler
+from clone_callbacks import clone_callback_handler
+
+def register_clone_handlers(app: Client):
+    @app.on_message(filters.command("start") & filters.private)
+    async def start_cmd(client: Client, message):
+        await clone_start_handler(client, message)
+
+    @app.on_message(filters.command("id") & filters.private)
+    async def id_cmd(client: Client, message):
+        await clone_id_handler(client, message)
+
+    @app.on_message(filters.command("explorefiles") & filters.private)
+    async def explore_cmd(client: Client, message):
+        await clone_explore_handler(client, message)
+
+    @app.on_callback_query()
+    async def cb_query(client: Client, callback):
+        await clone_callback_handler(client, callback)

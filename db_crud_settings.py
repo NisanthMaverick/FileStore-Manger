@@ -1,0 +1,141 @@
+import asyncio
+from db_models import SessionLocal, Settings, CloneBot, User, Admin
+
+def _get_settings_sync():
+    with SessionLocal() as session:
+        settings = session.query(Settings).first()
+        if not settings:
+            settings = Settings(id=1)
+            session.add(settings)
+            session.commit()
+            session.refresh(settings)
+        return {
+            "welcome_msg": settings.welcome_msg,
+            "fsub_channels": settings.fsub_channels,
+            "fsub_enabled": settings.fsub_enabled,
+            "custom_buttons": settings.custom_buttons,
+            "primary_clone_username": settings.primary_clone_username,
+            "db_channel_id": settings.db_channel_id,
+            "log_channel_id": settings.log_channel_id,
+            "auto_delete_enabled": settings.auto_delete_enabled,
+            "auto_delete_duration": settings.auto_delete_duration
+        }
+
+def _update_settings_sync(updates: dict):
+    with SessionLocal() as session:
+        settings = session.query(Settings).first()
+        if not settings:
+            settings = Settings(id=1)
+            session.add(settings)
+        for key, value in updates.items():
+            if hasattr(settings, key):
+                setattr(settings, key, value)
+        session.commit()
+
+def _add_clone_bot_sync(token: str, username: str, name: str):
+    with SessionLocal() as session:
+        bot = session.query(CloneBot).filter(CloneBot.token == token).first()
+        if not bot:
+            bot = CloneBot(token=token, username=username, name=name, is_active=False)
+            session.add(bot)
+        else:
+            bot.username = username
+            bot.name = name
+        session.commit()
+
+def _get_clone_bots_sync():
+    with SessionLocal() as session:
+        bots = session.query(CloneBot).all()
+        return [{"token": b.token, "username": b.username, "name": b.name, "is_active": b.is_active} for b in bots]
+
+def _set_clone_bot_status_sync(token: str, is_active: bool):
+    with SessionLocal() as session:
+        bot = session.query(CloneBot).filter(CloneBot.token == token).first()
+        if bot:
+            bot.is_active = is_active
+            session.commit()
+
+def _delete_clone_bot_sync(token: str):
+    with SessionLocal() as session:
+        bot = session.query(CloneBot).filter(CloneBot.token == token).first()
+        if bot:
+            session.delete(bot)
+            session.commit()
+
+def _add_user_sync(user_id: int, username: str, first_name: str) -> bool:
+    with SessionLocal() as session:
+        user = session.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            user = User(user_id=user_id, username=username, first_name=first_name)
+            session.add(user)
+            session.commit()
+            return True
+        return False
+
+def _get_user_count_sync():
+    with SessionLocal() as session:
+        return session.query(User).count()
+
+def _list_users_sync(limit=100):
+    with SessionLocal() as session:
+        users = session.query(User).order_by(User.joined_at.desc()).limit(limit).all()
+        return [{"user_id": u.user_id, "username": u.username, "first_name": u.first_name, "joined_at": u.joined_at.isoformat()} for u in users]
+
+def _is_admin_sync(user_id: int, owner_id: int):
+    if user_id == owner_id:
+        return True
+    with SessionLocal() as session:
+        admin = session.query(Admin).filter(Admin.user_id == user_id).first()
+        return admin is not None
+
+def _add_admin_sync(user_id: int):
+    with SessionLocal() as session:
+        admin = session.query(Admin).filter(Admin.user_id == user_id).first()
+        if not admin:
+            admin = Admin(user_id=user_id)
+            session.add(admin)
+            session.commit()
+
+def _remove_admin_sync(user_id: int):
+    with SessionLocal() as session:
+        admin = session.query(Admin).filter(Admin.user_id == user_id).first()
+        if admin:
+            session.delete(admin)
+            session.commit()
+
+# --- Async wrappers ---
+async def get_settings():
+    return await asyncio.to_thread(_get_settings_sync)
+
+async def update_settings(updates: dict):
+    await asyncio.to_thread(_update_settings_sync, updates)
+
+async def add_clone_bot(token: str, username: str, name: str):
+    await asyncio.to_thread(_add_clone_bot_sync, token, username, name)
+
+async def get_clone_bots():
+    return await asyncio.to_thread(_get_clone_bots_sync)
+
+async def set_clone_bot_status(token: str, is_active: bool):
+    await asyncio.to_thread(_set_clone_bot_status_sync, token, is_active)
+
+async def delete_clone_bot(token: str):
+    await asyncio.to_thread(_delete_clone_bot_sync, token)
+
+async def add_user(user_id: int, username: str, first_name: str) -> bool:
+    return await asyncio.to_thread(_add_user_sync, user_id, username, first_name)
+
+async def get_user_count():
+    return await asyncio.to_thread(_get_user_count_sync)
+
+async def list_users(limit=100):
+    return await asyncio.to_thread(_list_users_sync, limit)
+
+async def is_admin(user_id: int, owner_id: int):
+    return await asyncio.to_thread(_is_admin_sync, user_id, owner_id)
+
+async def add_admin(user_id: int):
+    await asyncio.to_thread(_add_admin_sync, user_id)
+
+async def remove_admin(user_id: int):
+    await asyncio.to_thread(_remove_admin_sync, user_id)
