@@ -10,7 +10,7 @@ from .helpers import (
 )
 from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
-    get_manage_clones_markup, get_bot_details_markup, show_bot_details
+    get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -21,6 +21,22 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
     if data == "db_sync":
         await callback.answer()
         await show_db_sync(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "sub_mgr":
+        await callback.answer()
+        await show_sub_mgr(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "broadcast_subs":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_broadcast", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "📢 **Broadcast Message to All Subscribers**\n\n"
+            "Please send or forward the message you want to broadcast to all bot users.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="sub_mgr")]])
+        )
         return True
 
     elif data == "db_channel_options":

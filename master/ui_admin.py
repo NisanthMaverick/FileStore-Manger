@@ -143,3 +143,21 @@ async def show_bot_details(client: Client, chat_id: int, message_id: int, bot: d
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=get_bot_details_markup(bot, primary))
     except Exception as e:
         print(f"Error rendering bot_details: {e}")
+
+async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
+    count = await database.get_user_count()
+    text = f"👥 **User & Subscribers Management**\n\n" \
+           f"📈 **Total Subscribers:** `{count}`\n\n" \
+           f"Select an option below to interact with subscribers:"
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📢 Broadcast Message", callback_data="broadcast_subs")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back", callback_data="main_panel")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering sub_mgr: {e}")
