@@ -2,16 +2,16 @@ import uuid
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action, get_readable_size, get_back_button
 )
-from main_ui_files import show_folder_management, show_series_browse, show_manage_series
+from .ui_files import show_folder_management, show_series_browse, show_manage_series
 
 async def handle_files_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
     # Delegate bulk add and markers states
-    from main_states_files_bulk import handle_bulk_states
+    from .states_files_bulk import handle_bulk_states
     if await handle_bulk_states(client, message, state, state_data, message_id):
         return True
 

@@ -5,14 +5,14 @@ from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from config import OWNER_ID
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action, get_back_button
 )
-from main_ui_admin import (
+from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
-    get_manage_clones_markup, get_bot_details_markup
+    get_manage_clones_markup, get_bot_details_markup, show_bot_details
 )
-from clone_tree import start_clone_bot, stop_clone_bot
+from clones.tree import start_clone_bot, stop_clone_bot
 
 async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: str) -> bool:
     user_id = callback.from_user.id
@@ -205,14 +205,7 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         if bot:
             settings = await database.get_settings()
             primary = settings.get("primary_clone_username")
-            status_str = "Active 🟢" if bot["is_active"] else "Inactive 🔴"
-            primary_label = " (⭐ Primary Redirect)" if bot["username"] == primary else ""
-            text = f"🤖 **Clone Bot Instance Details**\n\n" \
-                   f"👤 **Name:** {bot['name']}\n" \
-                   f"🤖 **Username:** @{bot['username']}\n" \
-                   f"⚡ **Status:** {status_str}{primary_label}\n\n" \
-                   f"Manage this bot instance using the controls below:"
-            await callback.message.edit_text(text, reply_markup=get_bot_details_markup(bot, primary))
+            await show_bot_details(client, callback.message.chat.id, callback.message.id, bot, primary)
         return True
 
     elif data.startswith("status_bot_"):
@@ -249,14 +242,7 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         if target_bot:
             settings = await database.get_settings()
             primary = settings.get("primary_clone_username")
-            status_str = "Active 🟢" if target_bot["is_active"] else "Inactive 🔴"
-            primary_label = " (⭐ Primary Redirect)" if target_bot["username"] == primary else ""
-            text = f"🤖 **Clone Bot Instance Details**\n\n" \
-                   f"👤 **Name:** {target_bot['name']}\n" \
-                   f"🤖 **Username:** @{target_bot['username']}\n" \
-                   f"⚡ **Status:** {status_str}{primary_label}\n\n" \
-                   f"Manage this bot instance using the controls below:"
-            await callback.message.edit_text(text, reply_markup=get_bot_details_markup(target_bot, primary))
+            await show_bot_details(client, callback.message.chat.id, callback.message.id, target_bot, primary)
         return True
 
     elif data.startswith("primary_bot_"):
@@ -270,14 +256,7 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         if target_bot:
             settings = await database.get_settings()
             primary = settings.get("primary_clone_username")
-            status_str = "Active 🟢" if target_bot["is_active"] else "Inactive 🔴"
-            primary_label = " (⭐ Primary Redirect)" if target_bot["username"] == primary else ""
-            text = f"🤖 **Clone Bot Instance Details**\n\n" \
-                   f"👤 **Name:** {target_bot['name']}\n" \
-                   f"🤖 **Username:** @{target_bot['username']}\n" \
-                   f"⚡ **Status:** {status_str}{primary_label}\n\n" \
-                   f"Manage this bot instance using the controls below:"
-            await callback.message.edit_text(text, reply_markup=get_bot_details_markup(target_bot, primary))
+            await show_bot_details(client, callback.message.chat.id, callback.message.id, target_bot, primary)
         return True
 
     elif data.startswith("del_bot_"):
@@ -295,9 +274,6 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
                 await database.update_settings({"primary_clone_username": ""})
             await log_admin_action(f"🛡️ **Clone Bot Deleted**: @{username} by {callback.from_user.mention}")
             
-        bots = await database.get_clone_bots()
-        settings = await database.get_settings()
-        primary = settings.get("primary_clone_username")
         await show_manage_clones(client, callback.message.chat.id, callback.message.id)
         return True
 

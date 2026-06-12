@@ -2,13 +2,13 @@ import asyncio
 from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action, get_back_button
 )
-from main_ui_files import (
-    show_folder_management, show_series_browse, show_manage_series
+from .ui_files import (
+    show_folder_management, show_series_browse, show_manage_series, show_filesec_actions
 )
-from main_ui_config import show_auto_delete_menu
+from .ui_config import show_auto_delete_menu
 
 async def handle_series_callbacks(client: Client, callback: CallbackQuery, data: str) -> bool:
     user_id = callback.from_user.id
@@ -202,14 +202,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         if not sec:
             return await callback.answer("❌ Section not found.", show_alert=True)
         _, total_files = await database.list_files(skip=0, limit=1, series_id=series_id, section_id=section_id)
-        parent_id = sec["parent_id"]
-        text = f"📥 **{sec['name']}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
-        markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add More Files", callback_data=f"filesec_add_{series_id}_{section_id}"), InlineKeyboardButton("🔄 Replace All Files", callback_data=f"filesec_replace_{series_id}_{section_id}")],
-            [InlineKeyboardButton("✏️ Rename Button", callback_data=f"rename_sec_{series_id}_{section_id}"), InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}")],
-            [InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}")]
-        ])
-        await callback.message.edit_text(text, reply_markup=markup)
+        await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files)
         return True
 
     elif data.startswith("filesec_add_"):
@@ -287,14 +280,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
                 sec = await database.get_section(section_id)
                 if sec:
                     _, total_files = await database.list_files(skip=0, limit=1, series_id=series_id, section_id=section_id)
-                    parent_id = sec["parent_id"]
-                    text = f"📥 **{sec['name']}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
-                    markup = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("➕ Add More Files", callback_data=f"filesec_add_{series_id}_{section_id}"), InlineKeyboardButton("🔄 Replace All Files", callback_data=f"filesec_replace_{series_id}_{section_id}")],
-                        [InlineKeyboardButton("✏️ Rename Button", callback_data=f"rename_sec_{series_id}_{section_id}"), InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}")],
-                        [InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}")]
-                    ])
-                    await callback.message.edit_text(text, reply_markup=markup)
+                    await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files)
                 else:
                     await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None)
         return True

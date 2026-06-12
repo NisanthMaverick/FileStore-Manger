@@ -1,12 +1,12 @@
 from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from clone_helpers import (
+from .helpers import (
     check_user_subscribed, get_clone_welcome_markup,
     handle_auto_delete_if_enabled, log_download_action
 )
-from clone_tree import show_user_tree
-from clone_handlers import handle_payload
+from .tree import show_user_tree
+from .handlers import handle_payload
 
 async def clone_callback_handler(client: Client, callback: CallbackQuery):
     user_id = callback.from_user.id

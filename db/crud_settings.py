@@ -1,5 +1,5 @@
 import asyncio
-from db_models import SessionLocal, Settings, CloneBot, User, Admin
+from .models import SessionLocal, Settings, CloneBot, User, Admin
 
 def _get_settings_sync():
     with SessionLocal() as session:

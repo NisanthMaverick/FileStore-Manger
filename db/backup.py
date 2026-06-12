@@ -1,7 +1,7 @@
 import json
 import asyncio
 from datetime import datetime
-from db_models import (
+from .models import (
     engine, SessionLocal, db_init, Settings, Admin, User,
     CloneBot, Series, SeriesSection, FileRecord
 )
@@ -189,13 +189,13 @@ def _import_db_backup_sync(json_str: str) -> bool:
             raise e
 
 def _restart_database_sync() -> bool:
-    import db_models
+    from . import models
     try:
-        db_models.engine.dispose()
+        models.engine.dispose()
         from sqlalchemy import create_engine
         from config import DATABASE_URL
-        db_models.engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
-        db_models.SessionLocal.configure(bind=db_models.engine)
+        models.engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
+        models.SessionLocal.configure(bind=models.engine)
         db_init()
         return True
     except Exception as e:

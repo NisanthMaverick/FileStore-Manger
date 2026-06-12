@@ -2,8 +2,8 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from config import OWNER_ID
-from main_helpers import (
-    ADMIN_STATES, get_main_panel_markup, get_welcome_markup, log_new_user_start
+from .helpers import (
+    ADMIN_STATES, get_main_panel_markup, get_welcome_markup, log_new_user_start, get_back_button
 )
 
 async def start_handler(client: Client, message: Message):
@@ -69,7 +69,6 @@ async def explore_handler(client: Client, message: Message):
                 buttons.append([
                     InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0")
                 ])
-        from main_helpers import get_back_button
         buttons.append(get_back_button("manage_files"))
         await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
     else:

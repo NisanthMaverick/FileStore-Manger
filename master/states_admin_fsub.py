@@ -2,10 +2,10 @@ import json
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action
 )
-from main_ui_config import (
+from .ui_config import (
     show_bot_config, show_fsub_menu, show_fsub_ch_details
 )
 

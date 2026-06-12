@@ -4,11 +4,11 @@ from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from config import API_ID, API_HASH
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action
 )
-from main_ui_config import show_btn_mgr, show_btn_details
-from main_ui_admin import show_manage_clones
+from .ui_config import show_btn_mgr, show_btn_details
+from .ui_admin import show_manage_clones
 
 async def handle_buttons_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id

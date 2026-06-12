@@ -1,7 +1,7 @@
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import get_back_button
+from .helpers import get_back_button
 
 async def show_folder_management(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = 0):
     series = await database.get_series(series_id)
@@ -179,3 +179,24 @@ async def show_manage_files(client: Client, chat_id: int, message_id: int):
         )
     except Exception as e:
         print(f"Error rendering manage_files: {e}")
+
+async def show_filesec_actions(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, sec: dict, total_files: int):
+    parent_id = sec["parent_id"]
+    text = f"📥 **{sec['name']}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("➕ Add More Files", callback_data=f"filesec_add_{series_id}_{section_id}"),
+            InlineKeyboardButton("🔄 Replace All Files", callback_data=f"filesec_replace_{series_id}_{section_id}")
+        ],
+        [
+            InlineKeyboardButton("✏️ Rename Button", callback_data=f"rename_sec_{series_id}_{section_id}"),
+            InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering filesec_actions: {e}")

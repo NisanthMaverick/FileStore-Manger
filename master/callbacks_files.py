@@ -1,10 +1,10 @@
 from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, get_readable_size, get_back_button, get_main_panel_markup
 )
-from main_ui_files import (
+from .ui_files import (
     show_manage_series, show_manage_files
 )
 

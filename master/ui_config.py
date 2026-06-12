@@ -2,7 +2,7 @@ import json
 from pyrogram import Client
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import get_back_button
+from .helpers import get_back_button
 
 async def show_bot_config(client: Client, chat_id: int, message_id: int):
     settings = await database.get_settings()

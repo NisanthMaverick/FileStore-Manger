@@ -130,3 +130,16 @@ def get_bot_details_markup(bot, primary):
         InlineKeyboardButton("🔙 Back", callback_data="manage_clones")
     ])
     return InlineKeyboardMarkup(buttons)
+
+async def show_bot_details(client: Client, chat_id: int, message_id: int, bot: dict, primary: str):
+    status_str = "Active 🟢" if bot["is_active"] else "Inactive 🔴"
+    primary_label = " (⭐ Primary Redirect)" if bot["username"] == primary else ""
+    text = f"🤖 **Clone Bot Instance Details**\n\n" \
+           f"👤 **Name:** {bot['name']}\n" \
+           f"🤖 **Username:** @{bot['username']}\n" \
+           f"⚡ **Status:** {status_str}{primary_label}\n\n" \
+           f"Manage this bot instance using the controls below:"
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=get_bot_details_markup(bot, primary))
+    except Exception as e:
+        print(f"Error rendering bot_details: {e}")

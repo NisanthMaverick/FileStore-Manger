@@ -1,5 +1,5 @@
 import asyncio
-from db_models import SessionLocal, Series, SeriesSection, FileRecord
+from .models import SessionLocal, Series, SeriesSection, FileRecord
 
 def _add_file_sync(file_code: str, message_id: int, file_name: str, file_size: int, mime_type: str, caption: str, series_id=None, episode_number=None, section_id=None):
     with SessionLocal() as session:

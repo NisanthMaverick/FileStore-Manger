@@ -2,10 +2,10 @@ import json
 from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, get_back_button
 )
-from main_ui_config import (
+from .ui_config import (
     show_bot_config, show_auto_delete_menu, show_fsub_menu,
     show_fsub_ch_details, show_btn_mgr, show_btn_details
 )
@@ -89,7 +89,7 @@ async def handle_config_callbacks(client: Client, callback: CallbackQuery, data:
             "data": {"index": idx}
         }
         await callback.message.edit_text(
-            "✏️ **Edit Invite Link**\n\nPlease enter the new custom invite link for this channel:\n\n❌ Send /cancel to abort.",
+            "✏️ **Edit Invite Link**\n\nPlease enter the new invite link for this channel:\n\n❌ Send /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"fsub_ch_{idx}")]])
         )
         return True

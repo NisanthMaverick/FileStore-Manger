@@ -6,22 +6,22 @@ from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.errors import FloodWait
 import database
 from config import OWNER_ID
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action, get_back_button
 )
-from main_ui_config import show_auto_delete_menu
-from main_ui_admin import show_db_sync, show_mgr_admins
+from .ui_config import show_auto_delete_menu
+from .ui_admin import show_db_sync, show_mgr_admins
 
 async def handle_admin_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
     # Delegate FSub and welcome templates states
-    from main_states_admin_fsub import handle_fsub_states
+    from .states_admin_fsub import handle_fsub_states
     if await handle_fsub_states(client, message, state, state_data, message_id):
         return True
 
     # Delegate custom buttons and clone registration states
-    from main_states_admin_buttons import handle_buttons_states
+    from .states_admin_buttons import handle_buttons_states
     if await handle_buttons_states(client, message, state, state_data, message_id):
         return True
 

@@ -65,7 +65,7 @@ async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id
     copied_count = 0
     skipped_count = 0
 
-    from main_ui_files import show_series_browse
+    from .ui_files import show_series_browse
 
     try:
         for current_id in range(start_id, end_id + 1):

@@ -3,11 +3,11 @@ import re
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from main_helpers import (
+from .helpers import (
     ADMIN_STATES, log_admin_action, parse_tg_link, extract_msg_from_forward
 )
-from main_ui_files import show_series_browse
-from main_batch import copy_files_silently, run_batch_copy
+from .ui_files import show_series_browse
+from .batch import copy_files_silently, run_batch_copy
 
 async def handle_bulk_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id

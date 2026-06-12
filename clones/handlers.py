@@ -1,11 +1,11 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
-from clone_helpers import (
+from .helpers import (
     log_new_user_start, check_user_subscribed, get_clone_welcome_markup,
     handle_auto_delete_if_enabled, log_download_action
 )
-from clone_tree import show_user_tree
+from .tree import show_user_tree
 
 async def clone_start_handler(client: Client, message: Message):
     user_id = message.from_user.id
