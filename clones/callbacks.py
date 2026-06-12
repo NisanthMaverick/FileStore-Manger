@@ -139,7 +139,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         else:
             for s in sliced_list:
                 text += f"▪️ **{s['title']}**\n"
-                buttons.append([InlineKeyboardButton(f"🎬 View {s['title'][:25]}", callback_data=f"cl_series_{s['id']}_0")])
+                buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
         
         pag_row = []
         if skip > 0:
