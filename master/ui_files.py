@@ -160,11 +160,10 @@ async def show_manage_files(client: Client, chat_id: int, message_id: int):
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📤 Store New File", callback_data="add_file"),
-            InlineKeyboardButton("📁 Browse Files", callback_data="list_files_0")
+            InlineKeyboardButton("➕ Create Series", callback_data="create_series")
         ],
         [
-            InlineKeyboardButton("🎬 Series Library", callback_data="manage_series"),
-            InlineKeyboardButton("➕ Create Series", callback_data="create_series")
+            InlineKeyboardButton("🎬 Series Library", callback_data="manage_series")
         ],
         [
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")

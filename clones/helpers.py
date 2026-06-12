@@ -99,21 +99,7 @@ async def check_user_subscribed(client: Client, user_id: int) -> tuple[bool, lis
 
 # Helper to log download to Log Channel
 async def log_download_action(client: Client, file_info: dict, user_message: Message):
-    try:
-        settings = await database.get_settings()
-        log_channel = settings.get("log_channel_id")
-        if log_channel:
-            bot_me = client.me
-            user = user_message.from_user
-            text = f"📥 **File Downloaded**\n\n" \
-                   f"📂 **File:** `{file_info['file_name']}`\n" \
-                   f"📦 **Size:** {get_readable_size(file_info['file_size'])}\n" \
-                   f"🔗 **Code:** `{file_info['file_code']}`\n" \
-                   f"👤 **User:** {user.mention} (`{user.id}`)\n" \
-                   f"🤖 **Via Bot:** @{bot_me.username}"
-            await client.send_message(chat_id=int(log_channel) if log_channel.startswith("-100") or log_channel.isdigit() else log_channel, text=text)
-    except Exception as e:
-        print(f"Failed to log download action: {e}")
+    pass
 
 async def log_new_user_start(client: Client, message: Message):
     try:
