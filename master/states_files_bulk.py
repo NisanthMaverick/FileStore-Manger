@@ -9,6 +9,16 @@ from .helpers import (
 from .ui_files import show_series_browse
 from .batch import copy_files_silently, run_batch_copy
 
+def clean_link_token(token: str) -> str:
+    cleaned = token.strip()
+    if cleaned.startswith('(') and cleaned.endswith(')'):
+        cleaned = cleaned[1:-1].strip()
+    elif cleaned.startswith('('):
+        cleaned = cleaned[1:].strip()
+    elif cleaned.endswith(')'):
+        cleaned = cleaned[:-1].strip()
+    return cleaned
+
 def is_telegram_link(token: str) -> bool:
     token_lower = token.lower().strip()
     if "t.me/" in token_lower or token_lower.startswith("http://") or token_lower.startswith("https://"):
@@ -67,11 +77,10 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                     continue
                 
                 first_part = sub_parts[0]
-                first_words = [w.replace('(', '').replace(')', '').strip() for w in first_part.split()]
-                first_words = [w for w in first_words if w]
+                first_words = first_part.split()
                 if len(first_words) >= 2:
-                    last_word = first_words[-1]
-                    sec_last_word = first_words[-2]
+                    last_word = clean_link_token(first_words[-1])
+                    sec_last_word = clean_link_token(first_words[-2])
                     
                     if is_telegram_link(last_word):
                         if is_telegram_link(sec_last_word):
@@ -87,8 +96,7 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                         
                         valid = True
                         for part in sub_parts[1:]:
-                            part_words = [w.replace('(', '').replace(')', '').strip() for w in part.split()]
-                            part_words = [w for w in part_words if w]
+                            part_words = [clean_link_token(w) for w in part.split() if w]
                             if not part_words:
                                 continue
                             if len(part_words) >= 2 and is_telegram_link(part_words[-1]) and is_telegram_link(part_words[-2]):
@@ -250,8 +258,7 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 return True
                 
             for part in parts:
-                tokens = [w.replace('(', '').replace(')', '').strip() for w in part.split()]
-                tokens = [w for w in tokens if w]
+                tokens = [clean_link_token(w) for w in part.split() if w]
                 if not tokens:
                     continue
                 if len(tokens) >= 2:

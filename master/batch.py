@@ -65,7 +65,22 @@ async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id
         await database.clear_section_files(section_id)
 
     dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
-    is_source_db = (source_chat_id == dest_chat)
+    
+    dest_chat_id = dest_chat
+    try:
+        dest_chat_obj = await client.get_chat(dest_chat)
+        dest_chat_id = dest_chat_obj.id
+    except Exception:
+        pass
+
+    source_chat_id_resolved = source_chat_id
+    try:
+        source_chat_obj = await client.get_chat(source_chat_id)
+        source_chat_id_resolved = source_chat_obj.id
+    except Exception:
+        pass
+
+    is_source_db = (source_chat_id_resolved == dest_chat_id)
     total_messages = end_id - start_id + 1
     copied_count = 0
     skipped_count = 0
@@ -179,6 +194,12 @@ async def run_multi_range_copy(
         await database.clear_section_files(section_id)
 
     dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
+    dest_chat_id = dest_chat
+    try:
+        dest_chat_obj = await client.get_chat(dest_chat)
+        dest_chat_id = dest_chat_obj.id
+    except Exception:
+        pass
     
     # Calculate total messages across all ranges
     total_messages = 0
@@ -196,7 +217,15 @@ async def run_multi_range_copy(
             source_chat_id = r["chat_id"]
             start_id = r["start_id"]
             end_id = r["end_id"]
-            is_source_db = (source_chat_id == dest_chat)
+            
+            source_chat_id_resolved = source_chat_id
+            try:
+                source_chat_obj = await client.get_chat(source_chat_id)
+                source_chat_id_resolved = source_chat_obj.id
+            except Exception:
+                pass
+                
+            is_source_db = (source_chat_id_resolved == dest_chat_id)
             
             for current_id in range(start_id, end_id + 1):
                 if idx_global > 0 and db_delay > 0 and not is_source_db:
