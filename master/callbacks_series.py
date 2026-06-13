@@ -32,14 +32,15 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         if not sec:
-            return await callback.message.edit_text("Folder not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_0")]]))
-        ADMIN_STATES[user_id] = {"state": "waiting_for_rename_sec", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id}}
+            return await callback.message.edit_text("Folder not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]]))
+        ADMIN_STATES[user_id] = {"state": "waiting_for_rename_sec", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             f"✏️ **Rename Folder: {sec['name']}**\n\nPlease enter the **New Folder Name / Heading**:\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}_{library_skip}")]])
         )
         return True
 
@@ -103,11 +104,12 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("1 Column", callback_data=f"set_sec_cols_{series_id}_{section_id}_1"), InlineKeyboardButton("2 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_2")],
-            [InlineKeyboardButton("3 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_3"), InlineKeyboardButton("4 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_4")],
-            [InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]
+            [InlineKeyboardButton("1 Column", callback_data=f"set_sec_cols_{series_id}_{section_id}_1_{library_skip}"), InlineKeyboardButton("2 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_2_{library_skip}")],
+            [InlineKeyboardButton("3 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_3_{library_skip}"), InlineKeyboardButton("4 Columns", callback_data=f"set_sec_cols_{series_id}_{section_id}_4_{library_skip}")],
+            [InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]
         ])
         await callback.message.edit_text("🔢 **Set Buttons Per Row**\n\nSelect columns layout per row:", reply_markup=markup)
         return True
@@ -117,36 +119,40 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         series_id = int(parts[3])
         section_id = int(parts[4])
         num = int(parts[5])
+        library_skip = int(parts[6]) if len(parts) > 6 else 0
         await callback.answer(f"Buttons per row set to {num}")
         if section_id == 0:
             await database.update_series_settings(series_id, buttons_per_row=num)
         else:
             await database.update_section_settings(section_id, buttons_per_row=num)
-        await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, section_id)
+        await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, section_id, library_skip=library_skip)
         return True
 
     elif data.startswith("rename_series_opt_"):
         parts = data.split("_")
         series_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_rename_series", "message_id": callback.message.id, "data": {"series_id": series_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_rename_series", "message_id": callback.message.id, "data": {"series_id": series_id, "library_skip": library_skip}}
         await callback.message.edit_text("✏️ **Rename Series**\n\nSend the new title for this series:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
         return True
 
     elif data.startswith("tree_del_series_"):
         parts = data.split("_")
         series_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         series = await database.get_series(series_id)
         if not series:
             return await callback.answer("Series not found.")
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("⚠️ Yes, Delete Series", callback_data=f"confirm_del_series_{series_id}"), InlineKeyboardButton("❌ Cancel", callback_data=f"manage_folder_opt_{series_id}_0")]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("⚠️ Yes, Delete Series", callback_data=f"confirm_del_series_{series_id}_{library_skip}"), InlineKeyboardButton("❌ Cancel", callback_data=f"manage_folder_opt_{series_id}_0_{library_skip}")]])
         await callback.message.edit_text(f"⚠️ **Confirm Delete Series**\n\nAre you sure you want to delete **{series['title']}**? This action is permanent!", reply_markup=markup)
         return True
 
     elif data.startswith("confirm_del_series_"):
         parts = data.split("_")
         series_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         series = await database.get_series(series_id)
         if series:
             title = series["title"]
@@ -155,18 +161,19 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             await callback.answer("Series deleted successfully.", show_alert=True)
         else:
             await callback.answer("Series not found.")
-        await show_manage_series(client, callback.message.chat.id, callback.message.id)
+        await show_manage_series(client, callback.message.chat.id, callback.message.id, skip=library_skip)
         return True
 
     elif data.startswith("tree_del_sec_"):
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         if not sec:
             return await callback.answer("Folder not found.")
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("⚠️ Yes, Delete Folder", callback_data=f"confirm_del_sec_{series_id}_{section_id}"), InlineKeyboardButton("❌ Cancel", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("⚠️ Yes, Delete Folder", callback_data=f"confirm_del_sec_{series_id}_{section_id}_{library_skip}"), InlineKeyboardButton("❌ Cancel", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]])
         await callback.message.edit_text(f"⚠️ **Confirm Delete Folder**\n\nAre you sure you want to delete **{sec['name']}**? This action is permanent!", reply_markup=markup)
         return True
 
@@ -174,6 +181,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         sec = await database.get_section(section_id)
         parent_id = None
         if sec:
@@ -182,7 +190,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             await callback.answer("Folder deleted successfully.", show_alert=True)
         else:
             await callback.answer("Folder not found.")
-        await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_id)
+        await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_id, library_skip=library_skip)
         return True
 
     elif data.startswith("del_tree_file_"):
@@ -203,6 +211,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
         
         text = (
@@ -213,11 +222,11 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         )
         markup = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("📁 Folder", callback_data=f"tree_add_type_folder_{series_id}_{section_id}"),
-                InlineKeyboardButton("📄 File", callback_data=f"tree_add_type_file_{series_id}_{section_id}")
+                InlineKeyboardButton("📁 Folder", callback_data=f"tree_add_type_folder_{series_id}_{section_id}_{library_skip}"),
+                InlineKeyboardButton("📄 File", callback_data=f"tree_add_type_file_{series_id}_{section_id}_{library_skip}")
             ],
             [
-                InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}")
+                InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}_{library_skip}")
             ]
         ])
         await callback.message.edit_text(text, reply_markup=markup)
@@ -227,8 +236,9 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_bulk_add", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_bulk_add", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             "📦 **Bulk Add Files & Folders**\n\n"
             "Paste your entries (separated by newlines or commas):\n\n"
@@ -254,42 +264,46 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         if not sec:
             return await callback.answer("❌ Section not found.", show_alert=True)
         _, total_files = await database.list_files(skip=0, limit=1, series_id=series_id, section_id=section_id)
-        await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files)
+        await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files, library_skip=library_skip)
         return True
 
     elif data.startswith("filesec_add_"):
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         parent_id = sec["parent_id"] if sec else None
-        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": False}}
-        await callback.message.edit_text("➕ **Add More Files — Step 1: Start Marker**\n\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}")]]))
+        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": False, "library_skip": library_skip}}
+        await callback.message.edit_text("➕ **Add More Files — Step 1: Start Marker**\n\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     elif data.startswith("filesec_replace_"):
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         parent_id = sec["parent_id"] if sec else None
-        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True}}
-        await callback.message.edit_text("🔄 **Replace All Files — Step 1: Start Marker**\n\n⚠️ Will delete existing files in this button.\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}")]]))
+        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
+        await callback.message.edit_text("🔄 **Replace All Files — Step 1: Start Marker**\n\n⚠️ Will delete existing files in this button.\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     elif data.startswith("tree_add_type_folder_"):
         parts = data.split("_")
         series_id = int(parts[4])
         section_id = int(parts[5])
+        library_skip = int(parts[6]) if len(parts) > 6 else 0
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_folder_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_folder_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             "📁 **Create Folder**\n\nPlease enter the **Folder Name**:\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
@@ -300,8 +314,9 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[4])
         section_id = int(parts[5])
+        library_skip = int(parts[6]) if len(parts) > 6 else 0
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_btn_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_btn_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             "📄 **Add File Button**\n\nPlease enter the **Button / File Name**:\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
@@ -320,23 +335,24 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             series_id = state_data["data"].get("series_id")
             parent_folder_id = state_data["data"].get("parent_folder_id")
             section_id = state_data["data"].get("section_id")
+            library_skip = state_data["data"].get("library_skip", 0)
             
             if state_name in ["waiting_for_folder_msg", "waiting_for_rename_series"]:
                 target_sec = section_id if section_id is not None else 0
-                await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, target_sec)
+                await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, target_sec, library_skip=library_skip)
                 return True
             
             if state_data["data"].get("is_new_section"):
                 new_sec_id = state_data["data"]["section_id"]
                 await database.delete_section(new_sec_id)
-                await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None)
+                await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None, library_skip=library_skip)
             else:
                 sec = await database.get_section(section_id)
                 if sec:
                     _, total_files = await database.list_files(skip=0, limit=1, series_id=series_id, section_id=section_id)
-                    await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files)
+                    await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files, library_skip=library_skip)
                 else:
-                    await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None)
+                    await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None, library_skip=library_skip)
         return True
 
     elif data == "series_management_menu":

@@ -3,11 +3,11 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from .helpers import get_back_button
 
-async def show_folder_management(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = 0):
+async def show_folder_management(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = 0, library_skip: int = 0):
     series = await database.get_series(series_id)
     if not series:
         try:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button("manage_series")]))
+            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
         except Exception:
             pass
         return
@@ -18,7 +18,7 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         current_sec = await database.get_section(section_id)
         if not current_sec:
             try:
-                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Folder not found.", reply_markup=InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back to Series", callback_data=f"browse_sec_{series_id}_0")]))
+                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Folder not found.", reply_markup=InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back to Series", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]))
             except Exception:
                 pass
             return
@@ -45,22 +45,22 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
 
     buttons_list = [
         [
-            InlineKeyboardButton("💬 Edit Message", callback_data=f"edit_sec_msg_{series_id}_{section_id}"),
-            InlineKeyboardButton("🔢 Buttons Per Row", callback_data=f"edit_sec_cols_{series_id}_{section_id}")
+            InlineKeyboardButton("💬 Edit Message", callback_data=f"edit_sec_msg_{series_id}_{section_id}_{library_skip}"),
+            InlineKeyboardButton("🔢 Buttons Per Row", callback_data=f"edit_sec_cols_{series_id}_{section_id}_{library_skip}")
         ],
         [
-            InlineKeyboardButton("✏️ Rename", callback_data=f"rename_series_opt_{series_id}" if is_root else f"rename_sec_{series_id}_{section_id}"),
-            InlineKeyboardButton("🗑 Delete", callback_data=f"tree_del_series_{series_id}" if is_root else f"tree_del_sec_{series_id}_{section_id}")
+            InlineKeyboardButton("✏️ Rename", callback_data=f"rename_series_opt_{series_id}_{library_skip}" if is_root else f"rename_sec_{series_id}_{section_id}_{library_skip}"),
+            InlineKeyboardButton("🗑 Delete", callback_data=f"tree_del_series_{series_id}_{library_skip}" if is_root else f"tree_del_sec_{series_id}_{section_id}_{library_skip}")
         ]
     ]
 
     if not is_root:
         buttons_list.append([
-            InlineKeyboardButton("📂 Move Folder", callback_data=f"move_folder_select_{series_id}_{section_id}_0")
+            InlineKeyboardButton("📂 Move Folder", callback_data=f"move_folder_select_{series_id}_{section_id}_{library_skip}_0")
         ])
 
     buttons_list.append([
-        InlineKeyboardButton("🔙 Back to Folder", callback_data=f"browse_sec_{series_id}_{section_id}")
+        InlineKeyboardButton("🔙 Back to Folder", callback_data=f"browse_sec_{series_id}_{section_id}_{library_skip}")
     ])
 
     markup = InlineKeyboardMarkup(buttons_list)
@@ -70,11 +70,11 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
     except Exception as e:
         print(f"Error rendering folder_management: {e}")
 
-async def show_series_browse(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None):
+async def show_series_browse(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, library_skip: int = 0):
     series = await database.get_series(series_id)
     if not series:
         try:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button("manage_series")]))
+            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
         except Exception:
             pass
         return
@@ -108,9 +108,9 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
         row = []
         for s in sections:
             if s.get("sec_type") == "files":
-                btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"filesec_act_{series_id}_{s['id']}")
+                btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"filesec_act_{series_id}_{s['id']}_{library_skip}")
             else:
-                btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"browse_sec_{series_id}_{s['id']}")
+                btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"browse_sec_{series_id}_{s['id']}_{library_skip}")
             row.append(btn)
             if len(row) == per_row:
                 buttons.append(row)
@@ -121,24 +121,24 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
         text += "_This folder is empty._\n"
 
     buttons.append([
-        InlineKeyboardButton("➕ Add Button", callback_data=f"tree_add_btn_{series_id}_{section_id or 0}"),
-        InlineKeyboardButton("📦 Bulk Add", callback_data=f"tree_bulk_add_{series_id}_{section_id or 0}")
+        InlineKeyboardButton("➕ Add Button", callback_data=f"tree_add_btn_{series_id}_{section_id or 0}_{library_skip}"),
+        InlineKeyboardButton("📦 Bulk Add", callback_data=f"tree_bulk_add_{series_id}_{section_id or 0}_{library_skip}")
     ])
     
     if section_id:
         buttons.append([
-            InlineKeyboardButton("⚙️ Folder Management", callback_data=f"manage_folder_opt_{series_id}_{section_id}")
+            InlineKeyboardButton("⚙️ Folder Management", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")
         ])
     else:
         buttons.append([
-            InlineKeyboardButton("⚙️ Series Management", callback_data=f"manage_folder_opt_{series_id}_0")
+            InlineKeyboardButton("⚙️ Series Management", callback_data=f"manage_folder_opt_{series_id}_0_{library_skip}")
         ])
 
     if section_id:
         parent_id = current_sec["parent_id"] if current_sec else None
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}_{library_skip}")])
     else:
-        buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")])
+        buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"manage_series_skip_{library_skip}")])
 
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -159,7 +159,7 @@ async def show_manage_series(client: Client, chat_id: int, message_id: int, skip
     else:
         for s in sliced_list:
             buttons.append([
-                InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0")
+                InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0_{skip}")
             ])
             
     pag_row = []
@@ -290,7 +290,7 @@ async def show_manage_files(client: Client, chat_id: int, message_id: int):
     except Exception as e:
         print(f"Error rendering manage_files: {e}")
 
-async def show_filesec_actions(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, sec: dict, total_files: int):
+async def show_filesec_actions(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, sec: dict, total_files: int, library_skip: int = 0):
     parent_id = sec["parent_id"]
     text = f"📥 **{sec['name']}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
     markup = InlineKeyboardMarkup([
@@ -303,7 +303,7 @@ async def show_filesec_actions(client: Client, chat_id: int, message_id: int, se
             InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}")
         ],
         [
-            InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}")
+            InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}_{library_skip}")
         ]
     ])
     try:
@@ -311,7 +311,7 @@ async def show_filesec_actions(client: Client, chat_id: int, message_id: int, se
     except Exception as e:
         print(f"Error rendering filesec_actions: {e}")
 
-async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, skip: int = 0):
+async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, skip: int = 0, library_skip: int = 0):
     series = await database.get_series(series_id)
     folder_to_move = await database.get_section(section_id)
     if not series or not folder_to_move:
@@ -351,7 +351,7 @@ async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, s
     # Always allow moving to Root (Top-Level) if currently not at root
     if folder_to_move["parent_id"] is not None:
         buttons.append([
-            InlineKeyboardButton("📁 Root (Top-Level)", callback_data=f"move_folder_execute_{series_id}_{section_id}_root")
+            InlineKeyboardButton("📁 Root (Top-Level)", callback_data=f"move_folder_execute_{series_id}_{section_id}_root_{library_skip}")
         ])
         
     # Page valid folders
@@ -361,20 +361,20 @@ async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, s
     for f in page_folders:
         prefix = "👉 " if f["id"] == folder_to_move["parent_id"] else "📁 "
         buttons.append([
-            InlineKeyboardButton(f"{prefix}{f['name']}", callback_data=f"move_folder_execute_{series_id}_{section_id}_{f['id']}")
+            InlineKeyboardButton(f"{prefix}{f['name']}", callback_data=f"move_folder_execute_{series_id}_{section_id}_{f['id']}_{library_skip}")
         ])
         
     # Pagination
     pag_row = []
     if skip > 0:
-        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"move_folder_select_{series_id}_{section_id}_{max(0, skip - limit)}"))
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"move_folder_select_{series_id}_{section_id}_{library_skip}_{max(0, skip - limit)}"))
     if skip + limit < len(valid_folders):
-        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"move_folder_select_{series_id}_{section_id}_{skip + limit}"))
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"move_folder_select_{series_id}_{section_id}_{library_skip}_{skip + limit}"))
     if pag_row:
         buttons.append(pag_row)
         
     buttons.append([
-        InlineKeyboardButton("🔙 Cancel / Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}")
+        InlineKeyboardButton("🔙 Cancel / Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")
     ])
     
     try:

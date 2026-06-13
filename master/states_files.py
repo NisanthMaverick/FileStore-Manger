@@ -147,6 +147,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
         parent_id = parent_folder_id if parent_folder_id > 0 else None
         
         await database.create_section(name, series_id, parent_id=parent_id, sec_type="folder")
@@ -155,7 +156,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         if message_id:
             try:
                 # show browse view
-                await show_series_browse(client, message.chat.id, message_id, series_id, parent_folder_id if parent_folder_id > 0 else None)
+                await show_series_browse(client, message.chat.id, message_id, series_id, parent_folder_id if parent_folder_id > 0 else None, library_skip=library_skip)
                 return True
             except Exception:
                 pass
@@ -171,6 +172,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
 
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
         parent_id = parent_folder_id if parent_folder_id > 0 else None
         
         new_sec_id = await database.create_section(name, series_id, parent_id=parent_id, sec_type="files")
@@ -180,6 +182,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         ADMIN_STATES[user_id]["data"]["file_name"] = name
         ADMIN_STATES[user_id]["data"]["is_new_section"] = True
         ADMIN_STATES[user_id]["data"]["clear_before"] = True
+        ADMIN_STATES[user_id]["data"]["library_skip"] = library_skip
 
         text = (
             f"📥 **{name}** — Step 1: Start Marker\n\n"
@@ -202,6 +205,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         new_name = message.text.strip()
         series_id = state_data["data"]["series_id"]
         section_id = state_data["data"]["section_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
         orig_msg_id = state_data.get("message_id")
         
         updated = await database.update_section(section_id, new_name)
@@ -209,14 +213,14 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         
         if updated:
             if orig_msg_id:
-                await show_folder_management(client, message.chat.id, orig_msg_id, series_id, section_id)
+                await show_folder_management(client, message.chat.id, orig_msg_id, series_id, section_id, library_skip=library_skip)
             else:
-                await message.reply_text(f"✅ Renamed successfully to **{new_name}**!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]]))
+                await message.reply_text(f"✅ Renamed successfully to **{new_name}**!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
         else:
             if orig_msg_id:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text="❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]]))
+                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text="❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
             else:
-                await message.reply_text("❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]]))
+                await message.reply_text("❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     # 7. Waiting for Folder Custom Message
@@ -224,6 +228,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         new_msg = message.text.strip()
         series_id = state_data["data"]["series_id"]
         section_id = state_data["data"]["section_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
         
         if section_id == 0:
             await database.update_series_settings(series_id, custom_msg=new_msg)
@@ -232,19 +237,20 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             
         ADMIN_STATES.pop(user_id, None)
         if message_id:
-            await show_folder_management(client, message.chat.id, message_id, series_id, section_id)
+            await show_folder_management(client, message.chat.id, message_id, series_id, section_id, library_skip=library_skip)
         else:
-            await message.reply_text("✅ Custom message updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Management", callback_data=f"manage_folder_opt_{series_id}_{section_id}")]]))
+            await message.reply_text("✅ Custom message updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Management", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     # 8. Waiting for Rename Series Title
     elif state == "waiting_for_rename_series":
         new_title = message.text.strip()
         series_id = state_data["data"]["series_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
         
         if not new_title:
             text = "⚠️ Title cannot be empty. Please send a valid title or send /cancel."
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_folder_opt_{series_id}_0")]])
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_folder_opt_{series_id}_0_{library_skip}")]])
             if message_id:
                 try:
                     await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
@@ -258,9 +264,9 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         ADMIN_STATES.pop(user_id, None)
         
         if message_id:
-            await show_folder_management(client, message.chat.id, message_id, series_id, 0)
+            await show_folder_management(client, message.chat.id, message_id, series_id, 0, library_skip=library_skip)
         else:
-            await message.reply_text("✅ Series renamed successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Management", callback_data=f"manage_folder_opt_{series_id}_0")]]))
+            await message.reply_text("✅ Series renamed successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Management", callback_data=f"manage_folder_opt_{series_id}_0_{library_skip}")]]))
         return True
 
     return False
