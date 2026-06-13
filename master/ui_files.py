@@ -7,7 +7,10 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
     series = await database.get_series(series_id)
     if not series:
         try:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
+            if message_id:
+                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
+            else:
+                await client.send_message(chat_id=chat_id, text="❌ Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
         except Exception:
             pass
         return
@@ -18,7 +21,10 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         current_sec = await database.get_section(section_id)
         if not current_sec:
             try:
-                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Folder not found.", reply_markup=InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back to Series", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]))
+                if message_id:
+                    await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Folder not found.", reply_markup=InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back to Series", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]))
+                else:
+                    await client.send_message(chat_id=chat_id, text="❌ Folder not found.", reply_markup=InlineKeyboardMarkup([InlineKeyboardButton("🔙 Back to Series", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]))
             except Exception:
                 pass
             return
@@ -27,23 +33,30 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         name = series["title"]
         custom_msg = series.get("custom_msg")
         buttons_per_row = series.get("buttons_per_row", 2)
+        custom_pic = series.get("custom_pic")
         type_str = "Series (Root)"
     else:
         name = current_sec["name"]
         custom_msg = current_sec.get("custom_msg")
         buttons_per_row = current_sec.get("buttons_per_row", 2)
+        custom_pic = current_sec.get("custom_pic")
         type_str = "Folder"
 
     custom_msg_status = custom_msg if custom_msg else "Default (Breadcrumbs / Description)"
+    custom_pic_status = "Enabled ✅" if custom_pic else "Disabled ❌"
     
     text = (
         f"⚙️ **{type_str} Settings: {name}**\n\n"
         f"💬 **Custom Message:**\n`{custom_msg_status}`\n\n"
+        f"🖼 **Custom Picture:** `{custom_pic_status}`\n\n"
         f"🔢 **Buttons per Row:** `{buttons_per_row}`\n\n"
         "Configure folder settings or perform administrative actions below:"
     )
 
     buttons_list = [
+        [
+            InlineKeyboardButton("🖼 Custom Picture", callback_data=f"edit_sec_pic_{series_id}_{section_id}_{library_skip}")
+        ],
         [
             InlineKeyboardButton("💬 Edit Message", callback_data=f"edit_sec_msg_{series_id}_{section_id}_{library_skip}"),
             InlineKeyboardButton("🔢 Buttons Per Row", callback_data=f"edit_sec_cols_{series_id}_{section_id}_{library_skip}")
@@ -66,15 +79,24 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
     markup = InlineKeyboardMarkup(buttons_list)
 
     try:
-        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+        if message_id:
+            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+        else:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
     except Exception as e:
-        print(f"Error rendering folder_management: {e}")
+        try:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+        except Exception as e2:
+            print(f"Error rendering folder_management: {e2}")
 
 async def show_series_browse(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, library_skip: int = 0):
     series = await database.get_series(series_id)
     if not series:
         try:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
+            if message_id:
+                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
+            else:
+                await client.send_message(chat_id=chat_id, text="Series not found.", reply_markup=InlineKeyboardMarkup([get_back_button(f"manage_series_skip_{library_skip}")]))
         except Exception:
             pass
         return
@@ -85,16 +107,26 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
 
     sections = await database.list_sections(series_id, parent_id=section_id)
 
-    path_str = f"🎬 **Series:** {series['title']}"
     if section_id:
-        sec_path = await database.get_section_path(section_id)
-        path_str += f" › {sec_path}"
+        custom_msg = current_sec.get("custom_msg") if current_sec else None
+        custom_pic = current_sec.get("custom_pic") if current_sec else None
+    else:
+        custom_msg = series.get("custom_msg")
+        custom_pic = series.get("custom_pic")
 
-    text = f"{path_str}\n"
-    desc = series.get('description', '')
-    if desc and desc.strip() and desc.strip().lower() != 'none' and not section_id:
-        text += f"_{desc.strip()}_\n"
-    text += "\n"
+    if custom_msg and custom_msg.strip():
+        text = custom_msg
+    else:
+        path_str = f"🎬 **Series:** {series['title']}"
+        if section_id:
+            sec_path = await database.get_section_path(section_id)
+            path_str += f" › {sec_path}"
+
+        text = f"{path_str}\n"
+        desc = series.get('description', '')
+        if desc and desc.strip() and desc.strip().lower() != 'none' and not section_id:
+            text += f"_{desc.strip()}_\n"
+        text += "\n"
 
     per_row = 2
     if section_id:
@@ -119,7 +151,8 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
         if row:
             buttons.append(row)
     else:
-        text += "_This folder is empty._\n"
+        if not custom_msg:
+            text += "_This folder is empty._\n"
 
     buttons.append([
         InlineKeyboardButton("➕ Add Button", callback_data=f"tree_add_btn_{series_id}_{section_id or 0}_{library_skip}"),
@@ -141,10 +174,51 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
     else:
         buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"manage_series_skip_{library_skip}")])
 
-    try:
-        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
-    except Exception as e:
-        print(f"Error rendering show_series_browse: {e}")
+    markup = InlineKeyboardMarkup(buttons)
+    if custom_pic:
+        from pyrogram.types import InputMediaPhoto
+        try:
+            await client.edit_message_media(
+                chat_id=chat_id,
+                message_id=message_id,
+                media=InputMediaPhoto(custom_pic, caption=text),
+                reply_markup=markup
+            )
+        except Exception:
+            try:
+                await client.delete_messages(chat_id=chat_id, message_ids=message_id)
+            except Exception:
+                pass
+            try:
+                await client.send_photo(
+                    chat_id=chat_id,
+                    photo=custom_pic,
+                    caption=text,
+                    reply_markup=markup
+                )
+            except Exception as e:
+                print(f"Error sending photo in show_series_browse: {e}")
+    else:
+        try:
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=markup
+            )
+        except Exception:
+            try:
+                await client.delete_messages(chat_id=chat_id, message_ids=message_id)
+            except Exception:
+                pass
+            try:
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=markup
+                )
+            except Exception as e:
+                print(f"Error sending text in show_series_browse: {e}")
 
 async def show_manage_series(client: Client, chat_id: int, message_id: int, skip: int = 0):
     settings = await database.get_settings()

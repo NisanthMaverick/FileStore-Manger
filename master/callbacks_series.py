@@ -102,10 +102,24 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[3])
         section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_folder_msg", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_folder_msg", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             "💬 **Edit Section Custom Message**\n\nSend the custom display message for this folder/section. Send `none` to reset to default.\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
+        )
+        return True
+
+    elif data.startswith("edit_sec_pic_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_folder_pic", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
+        await callback.message.edit_text(
+            "🖼 **Edit Custom Picture**\n\nUpload a picture/photo to be shown in this folder/section browse view. Send `none` to disable/remove the custom picture.\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
@@ -370,7 +384,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             section_id = state_data["data"].get("section_id")
             library_skip = state_data["data"].get("library_skip", 0)
             
-            if state_name in ["waiting_for_folder_msg", "waiting_for_rename_series"]:
+            if state_name in ["waiting_for_folder_msg", "waiting_for_rename_series", "waiting_for_folder_pic"]:
                 target_sec = section_id if section_id is not None else 0
                 await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, target_sec, library_skip=library_skip)
                 return True

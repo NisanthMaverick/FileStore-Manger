@@ -98,7 +98,8 @@ def _get_series_sync(series_id: int):
                 "description": s.description,
                 "custom_msg": s.custom_msg,
                 "buttons_per_row": s.buttons_per_row,
-                "display_order": s.display_order
+                "display_order": s.display_order,
+                "custom_pic": s.custom_pic
             }
         return None
 
@@ -111,7 +112,8 @@ def _list_series_sync():
             "description": s.description,
             "custom_msg": s.custom_msg,
             "buttons_per_row": s.buttons_per_row,
-            "display_order": s.display_order
+            "display_order": s.display_order,
+            "custom_pic": s.custom_pic
         } for s in series_list]
 
 def _delete_series_sync(series_id: int):
@@ -142,7 +144,8 @@ def _get_section_sync(section_id: int):
                 "parent_id": sec.parent_id,
                 "sec_type": sec.sec_type,
                 "custom_msg": sec.custom_msg,
-                "buttons_per_row": sec.buttons_per_row
+                "buttons_per_row": sec.buttons_per_row,
+                "custom_pic": sec.custom_pic
             }
         return None
 
@@ -161,7 +164,8 @@ def _list_sections_sync(series_id: int, parent_id: int = None):
             "parent_id": s.parent_id,
             "sec_type": s.sec_type,
             "custom_msg": s.custom_msg,
-            "buttons_per_row": s.buttons_per_row
+            "buttons_per_row": s.buttons_per_row,
+            "custom_pic": s.custom_pic
         } for s in sections]
 
 def _delete_section_sync(section_id: int) -> bool:
@@ -199,7 +203,7 @@ def _clear_section_files_sync(section_id: int):
         session.query(FileRecord).filter(FileRecord.section_id == section_id).delete()
         session.commit()
 
-def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None) -> bool:
+def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None) -> bool:
     with SessionLocal() as session:
         s = session.query(Series).filter(Series.id == series_id).first()
         if s:
@@ -213,11 +217,13 @@ def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_ro
                 s.description = description
             if display_order is not None:
                 s.display_order = display_order
+            if custom_pic is not None:
+                s.custom_pic = None if custom_pic == "none" else custom_pic
             session.commit()
             return True
         return False
 
-def _update_section_settings_sync(section_id: int, custom_msg, buttons_per_row) -> bool:
+def _update_section_settings_sync(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None) -> bool:
     with SessionLocal() as session:
         sec = session.query(SeriesSection).filter(SeriesSection.id == section_id).first()
         if sec:
@@ -225,6 +231,8 @@ def _update_section_settings_sync(section_id: int, custom_msg, buttons_per_row) 
                 sec.custom_msg = None if custom_msg == "none" else custom_msg
             if buttons_per_row is not None:
                 sec.buttons_per_row = buttons_per_row
+            if custom_pic is not None:
+                sec.custom_pic = None if custom_pic == "none" else custom_pic
             session.commit()
             return True
         return False
@@ -263,11 +271,11 @@ async def update_section(section_id: int, name: str) -> bool:
 async def clear_section_files(section_id: int):
     await asyncio.to_thread(_clear_section_files_sync, section_id)
 
-async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None):
-    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order)
+async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None):
+    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order, custom_pic)
 
-async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None):
-    return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row)
+async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None):
+    return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row, custom_pic)
 
 async def add_file(file_code: str, message_id: int, file_name: str, file_size: int, mime_type: str, caption: str, series_id=None, episode_number=None, section_id=None):
     await asyncio.to_thread(_add_file_sync, file_code, message_id, file_name, file_size, mime_type, caption, series_id, episode_number, section_id)
@@ -304,7 +312,8 @@ def _list_all_folders_sync(series_id: int):
             "parent_id": f.parent_id,
             "sec_type": f.sec_type,
             "custom_msg": f.custom_msg,
-            "buttons_per_row": f.buttons_per_row
+            "buttons_per_row": f.buttons_per_row,
+            "custom_pic": f.custom_pic
         } for f in folders]
 
 # --- Move Folder Async Helpers ---

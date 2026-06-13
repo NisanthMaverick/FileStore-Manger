@@ -47,36 +47,41 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         if is_new_message:
             await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
         else:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+            try:
+                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+            except Exception:
+                await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
         return
 
     sections = await database.list_sections(series_id, parent_id=section_id)
 
     custom_msg = None
+    custom_pic = None
     per_row = 2
 
     if section_id:
         current_sec = await database.get_section(section_id)
         if current_sec:
             custom_msg = current_sec.get("custom_msg")
+            custom_pic = current_sec.get("custom_pic")
             per_row = current_sec.get("buttons_per_row", 2)
     else:
         custom_msg = series.get("custom_msg")
+        custom_pic = series.get("custom_pic")
         per_row = series.get("buttons_per_row", 2)
 
-    path_str = f"🎬 **{series['title']}**"
-    if section_id:
-        sec_path = await database.get_section_path(section_id)
-        path_str += f" › {sec_path}"
-
-    if custom_msg:
-        text = f"{custom_msg}\n\n{path_str}\n"
+    if custom_msg and custom_msg.strip():
+        text = custom_msg
     else:
-        text = f"{path_str}\n"
+        path_str = f"🎬 **{series['title']}**"
+        if section_id:
+            sec_path = await database.get_section_path(section_id)
+            path_str += f" › {sec_path}"
 
-    if series['description'] and not section_id:
-        text += f"_{series['description']}_\n"
-    text += "\n"
+        text = f"{path_str}\n"
+        if series.get('description') and not section_id:
+            text += f"_{series['description']}_\n"
+        text += "\n"
 
     buttons = []
 
@@ -95,7 +100,8 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         if row:
             buttons.append(row)
     else:
-        text += "_Nothing here yet._\n"
+        if not custom_msg:
+            text += "_Nothing here yet._\n"
 
     if section_id:
         parent_id = current_sec["parent_id"] if current_sec else None
@@ -103,10 +109,51 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     else:
         buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
 
-    if is_new_message:
-        await client.send_message(chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    markup = InlineKeyboardMarkup(buttons)
+    if custom_pic:
+        from pyrogram.types import InputMediaPhoto
+        if is_new_message:
+            try:
+                await client.send_photo(chat_id=chat_id, photo=custom_pic, caption=text, reply_markup=markup)
+            except Exception as e:
+                print(f"Error sending photo in show_user_tree: {e}")
+        else:
+            try:
+                await client.edit_message_media(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    media=InputMediaPhoto(custom_pic, caption=text),
+                    reply_markup=markup
+                )
+            except Exception:
+                try:
+                    await client.delete_messages(chat_id=chat_id, message_ids=message_id)
+                except Exception:
+                    pass
+                try:
+                    await client.send_photo(chat_id=chat_id, photo=custom_pic, caption=text, reply_markup=markup)
+                except Exception as e:
+                    print(f"Error sending photo in show_user_tree: {e}")
     else:
-        try:
-            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
-        except Exception as e:
-            print(f"Error rendering user tree: {e}")
+        if is_new_message:
+            try:
+                await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+            except Exception as e:
+                print(f"Error sending text in show_user_tree: {e}")
+        else:
+            try:
+                await client.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=markup
+                )
+            except Exception:
+                try:
+                    await client.delete_messages(chat_id=chat_id, message_ids=message_id)
+                except Exception:
+                    pass
+                try:
+                    await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+                except Exception as e:
+                    print(f"Error sending text in show_user_tree: {e}")

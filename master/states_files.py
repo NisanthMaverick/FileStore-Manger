@@ -233,6 +233,45 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             await message.reply_text("✅ Custom message updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Management", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
+    # 7.5 Waiting for Folder Custom Picture
+    elif state == "waiting_for_folder_pic":
+        photo = message.photo
+        text_input = message.text.strip().lower() if message.text else ""
+        series_id = state_data["data"]["series_id"]
+        section_id = state_data["data"]["section_id"]
+        library_skip = state_data["data"].get("library_skip", 0)
+
+        if text_input == "none" or text_input == "/none":
+            if section_id == 0:
+                await database.update_series_settings(series_id, custom_pic="none")
+            else:
+                await database.update_section_settings(section_id, custom_pic="none")
+            ADMIN_STATES.pop(user_id, None)
+            if message_id:
+                try:
+                    await client.delete_messages(chat_id=message.chat.id, message_ids=message_id)
+                except Exception:
+                    pass
+            await show_folder_management(client, message.chat.id, None, series_id, section_id, library_skip=library_skip)
+            return True
+        elif photo:
+            file_id = photo.file_id
+            if section_id == 0:
+                await database.update_series_settings(series_id, custom_pic=file_id)
+            else:
+                await database.update_section_settings(section_id, custom_pic=file_id)
+            ADMIN_STATES.pop(user_id, None)
+            if message_id:
+                try:
+                    await client.delete_messages(chat_id=message.chat.id, message_ids=message_id)
+                except Exception:
+                    pass
+            await show_folder_management(client, message.chat.id, None, series_id, section_id, library_skip=library_skip)
+            return True
+        else:
+            await message.reply_text("⚠️ Please upload a valid photo, or send `none` to disable/remove the custom picture. Send /cancel to abort.")
+            return True
+
     # 8. Waiting for Rename Series Title
     elif state == "waiting_for_rename_series":
         new_title = message.text.strip()

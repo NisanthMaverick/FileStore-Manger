@@ -46,6 +46,7 @@ class Series(Base):
     custom_msg = Column(Text, nullable=True)
     buttons_per_row = Column(Integer, default=2)
     display_order = Column(Integer, default=0)
+    custom_pic = Column(String, nullable=True)
 
 class SeriesSection(Base):
     __tablename__ = "series_sections"
@@ -56,6 +57,7 @@ class SeriesSection(Base):
     sec_type = Column(String, server_default="folder", default="folder")
     custom_msg = Column(Text, nullable=True)
     buttons_per_row = Column(Integer, default=2)
+    custom_pic = Column(String, nullable=True)
 
 class FileRecord(Base):
     __tablename__ = "files"
@@ -114,6 +116,10 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series_sections ADD COLUMN buttons_per_row INTEGER DEFAULT 2"))
             conn.commit()
+    if "custom_pic" not in columns_sec:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series_sections ADD COLUMN custom_pic VARCHAR DEFAULT NULL"))
+            conn.commit()
 
     # settings columns check
     columns_sett = [c["name"] for c in inspector.get_columns("settings")]
@@ -171,6 +177,10 @@ def db_init():
     if "display_order" not in columns_ser:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series ADD COLUMN display_order INTEGER DEFAULT 0"))
+            conn.commit()
+    if "custom_pic" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN custom_pic VARCHAR DEFAULT NULL"))
             conn.commit()
 
     # Auto-migrate: any section that owns file records must be sec_type='files'
