@@ -217,3 +217,58 @@ async def check_clone_access(user_id: int) -> bool:
         
     is_sub = await database.is_subscriber(user_id)
     return is_sub
+
+async def send_clone_access_denied(client: Client, message: Message):
+    from config import OWNER_ID
+    owner_username = None
+    try:
+        owner_user = await client.get_users(OWNER_ID)
+        if owner_user and owner_user.username:
+            owner_username = owner_user.username
+    except Exception:
+        pass
+
+    contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+    
+    text = (
+        f"👋 **Welcome {message.from_user.mention}!**\n\n"
+        "⚠️ **Access Denied.**\n"
+        "This bot is private and restricted to subscribed users only.\n"
+        "Please contact the administrator to request access."
+    )
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+    ]])
+    await message.reply_text(text, reply_markup=markup)
+
+async def handle_clone_callback_access_denied(client: Client, callback):
+    from config import OWNER_ID
+    owner_username = None
+    try:
+        owner_user = await client.get_users(OWNER_ID)
+        if owner_user and owner_user.username:
+            owner_username = owner_user.username
+    except Exception:
+        pass
+
+    contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+    
+    text = (
+        f"👋 **Welcome {callback.from_user.mention}!**\n\n"
+        "⚠️ **Access Denied.**\n"
+        "This bot is private and restricted to subscribed users only.\n"
+        "Please contact the administrator to request access."
+    )
+    markup = InlineKeyboardMarkup([[
+        InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+    ]])
+    
+    await callback.answer("❌ Access Denied. This bot is private.", show_alert=True)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except Exception:
+        try:
+            await callback.message.reply_text(text, reply_markup=markup)
+        except Exception:
+            pass
+
