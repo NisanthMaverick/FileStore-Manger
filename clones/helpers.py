@@ -204,3 +204,16 @@ async def copy_messages_with_start_end(client: Client, user_id: int, db_channel:
             print(f"Failed to send end message: {e}")
             
     return sent_ids
+
+async def check_clone_access(user_id: int) -> bool:
+    from config import OWNER_ID
+    is_adm = await database.is_admin(user_id, OWNER_ID)
+    if is_adm:
+        return True
+        
+    settings = await database.get_settings()
+    if settings.get("access_to_all", True):
+        return True
+        
+    is_sub = await database.is_subscriber(user_id)
+    return is_sub

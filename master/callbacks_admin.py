@@ -10,7 +10,8 @@ from .helpers import (
 )
 from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
-    get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr
+    get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr,
+    show_remove_subscriber_menu
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -43,6 +44,41 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
     elif data == "sub_mgr":
         await callback.answer()
         await show_sub_mgr(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "toggle_access_to_all":
+        await callback.answer()
+        settings = await database.get_settings()
+        new_status = not settings.get("access_to_all", True)
+        await database.update_settings({"access_to_all": new_status})
+        await show_sub_mgr(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "add_subscriber":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_subscriber_id", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "➕ **Subscribe User**\n\n"
+            "Please send or forward the Telegram User ID of the user you want to subscribe.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="sub_mgr")]])
+        )
+        return True
+
+    elif data.startswith("remove_subscriber_menu_"):
+        await callback.answer()
+        skip = int(data.split("_")[3])
+        ADMIN_STATES[user_id] = {"state": "waiting_for_remove_subscriber_id", "message_id": callback.message.id, "data": {"skip": skip}}
+        await show_remove_subscriber_menu(client, callback.message.chat.id, callback.message.id, skip=skip)
+        return True
+
+    elif data.startswith("del_sub_"):
+        parts = data.split("_")
+        sub_id = int(parts[2])
+        skip = int(parts[3])
+        await callback.answer()
+        await database.remove_subscriber(sub_id)
+        await show_remove_subscriber_menu(client, callback.message.chat.id, callback.message.id, skip=skip)
         return True
 
     elif data == "broadcast_subs":

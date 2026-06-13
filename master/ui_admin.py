@@ -148,11 +148,27 @@ async def show_bot_details(client: Client, chat_id: int, message_id: int, bot: d
         print(f"Error rendering bot_details: {e}")
 
 async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
-    count = await database.get_user_count()
+    total_users = await database.get_user_count()
+    sub_count = await database.get_subscriber_count()
+    settings = await database.get_settings()
+    
+    access_status = "Enabled 🔓" if settings.get("access_to_all", True) else "Disabled (Restricted to Subscribers) 🔒"
+    
     text = f"👥 **User & Subscribers Management**\n\n" \
-           f"📈 **Total Subscribers:** `{count}`\n\n" \
-           f"Select an option below to interact with subscribers:"
+           f"📈 **Total Users (database):** `{total_users}`\n" \
+           f"⭐ **Subscribed Users:** `{sub_count}`\n" \
+           f"🔓 **Clone Bot Access Mode:** `{access_status}`\n\n" \
+           f"Select an option below to manage subscribers and access permissions:"
+           
+    toggle_text = "🔒 Restrict Access to Subs" if settings.get("access_to_all", True) else "🔓 Enable Access to All"
     markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("➕ Subscribe User", callback_data="add_subscriber"),
+            InlineKeyboardButton("🗑 Remove Subscriber", callback_data="remove_subscriber_menu_0")
+        ],
+        [
+            InlineKeyboardButton(toggle_text, callback_data="toggle_access_to_all")
+        ],
         [
             InlineKeyboardButton("📢 Broadcast Message", callback_data="broadcast_subs")
         ],
@@ -164,3 +180,37 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     except Exception as e:
         print(f"Error rendering sub_mgr: {e}")
+
+async def show_remove_subscriber_menu(client: Client, chat_id: int, message_id: int, skip: int = 0):
+    subs, total = await database.list_subscribers(skip=skip, limit=5)
+    
+    text = f"🗑 **Remove Subscriber / Subscriptions List** (Total: {total})\n\n" \
+           "To remove a subscriber, click their delete button below.\n" \
+           "You can also directly send the Telegram User ID of the user you want to remove.\n\n"
+           
+    buttons = []
+    if not subs:
+        text += "_No subscribed users found._"
+    else:
+        for s in subs:
+            name = s["first_name"] or "Unknown"
+            username_str = f" (@{s['username']})" if s["username"] else ""
+            text += f"▪️ **{name}**{username_str}\n  ID: `{s['user_id']}`\n\n"
+            buttons.append([
+                InlineKeyboardButton(f"🗑 Remove {name[:15]}...", callback_data=f"del_sub_{s['user_id']}_{skip}")
+            ])
+            
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"remove_subscriber_menu_{max(0, skip - 5)}"))
+    if skip + 5 < total:
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"remove_subscriber_menu_{skip + 5}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([InlineKeyboardButton("🔙 Back to Subscribers Mgr", callback_data="sub_mgr")])
+    
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering remove_subscriber_menu: {e}")

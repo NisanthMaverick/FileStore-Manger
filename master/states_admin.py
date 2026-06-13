@@ -379,4 +379,84 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Database Engine", callback_data="db_sync")]]))
         return True
 
+    elif state == "waiting_for_subscriber_id":
+        val = message.text.strip()
+        if not val.isdigit():
+            text = "⚠️ **Invalid input.** Please send a valid Telegram User ID (digits only). Send `/cancel` to abort."
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="sub_mgr")]])
+            if message_id:
+                try:
+                    await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(text, reply_markup=markup)
+            return True
+            
+        sub_id = int(val)
+        first_name = None
+        username = None
+        try:
+            user_obj = await client.get_users(sub_id)
+            if user_obj:
+                first_name = user_obj.first_name
+                username = user_obj.username
+        except Exception as e:
+            print(f"Failed to fetch user from Telegram API: {e}")
+            
+        added = await database.add_subscriber(sub_id, first_name, username)
+        ADMIN_STATES.pop(user_id, None)
+        
+        from .ui_admin import show_sub_mgr
+        if added:
+            text = f"✅ **User `{sub_id}` subscribed successfully!**"
+        else:
+            text = f"ℹ️ **User `{sub_id}` is already subscribed.**"
+            
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_sub_mgr(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Subscribers Mgr", callback_data="sub_mgr")]]))
+        return True
+
+    elif state == "waiting_for_remove_subscriber_id":
+        val = message.text.strip()
+        skip = state_data.get("data", {}).get("skip", 0)
+        
+        if not val.isdigit():
+            text = "⚠️ **Invalid input.** Please send a valid Telegram User ID (digits only). Send `/cancel` to abort."
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"remove_subscriber_menu_{skip}")]])
+            if message_id:
+                try:
+                    await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(text, reply_markup=markup)
+            return True
+            
+        sub_id = int(val)
+        removed = await database.remove_subscriber(sub_id)
+        ADMIN_STATES.pop(user_id, None)
+        
+        from .ui_admin import show_sub_mgr
+        if removed:
+            text = f"✅ **User `{sub_id}` unsubscribed and removed successfully!**"
+        else:
+            text = f"❌ **User `{sub_id}` was not found in the subscriber list.**"
+            
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_sub_mgr(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Subscribers Mgr", callback_data="sub_mgr")]]))
+        return True
+
     return False

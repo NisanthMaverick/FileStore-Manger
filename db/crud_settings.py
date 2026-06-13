@@ -1,5 +1,6 @@
 import asyncio
-from .models import SessionLocal, Settings, CloneBot, User, Admin
+from .models import SessionLocal, Settings, CloneBot, User, Admin, Subscriber
+from datetime import datetime
 
 def _get_settings_sync():
     with SessionLocal() as session:
@@ -25,7 +26,8 @@ def _get_settings_sync():
             "end_msg_db_id": settings.end_msg_db_id,
             "series_library_custom_msg": settings.series_library_custom_msg,
             "user_send_delay": settings.user_send_delay,
-            "db_upload_delay": settings.db_upload_delay
+            "db_upload_delay": settings.db_upload_delay,
+            "access_to_all": settings.access_to_all
         }
 
 def _update_settings_sync(updates: dict):
@@ -146,3 +148,70 @@ async def add_admin(user_id: int):
 
 async def remove_admin(user_id: int):
     await asyncio.to_thread(_remove_admin_sync, user_id)
+
+# --- Subscriber Sync Functions ---
+def _add_subscriber_sync(user_id: int, first_name: str = None, username: str = None) -> bool:
+    with SessionLocal() as session:
+        sub = session.query(Subscriber).filter(Subscriber.user_id == user_id).first()
+        if not sub:
+            if not first_name:
+                user = session.query(User).filter(User.user_id == user_id).first()
+                if user:
+                    first_name = user.first_name
+                    username = user.username
+            
+            sub = Subscriber(
+                user_id=user_id,
+                first_name=first_name or f"User {user_id}",
+                username=username
+            )
+            session.add(sub)
+            session.commit()
+            return True
+        return False
+
+def _remove_subscriber_sync(user_id: int) -> bool:
+    with SessionLocal() as session:
+        sub = session.query(Subscriber).filter(Subscriber.user_id == user_id).first()
+        if sub:
+            session.delete(sub)
+            session.commit()
+            return True
+        return False
+
+def _is_subscriber_sync(user_id: int) -> bool:
+    with SessionLocal() as session:
+        sub = session.query(Subscriber).filter(Subscriber.user_id == user_id).first()
+        return sub is not None
+
+def _get_subscriber_count_sync() -> int:
+    with SessionLocal() as session:
+        return session.query(Subscriber).count()
+
+def _list_subscribers_sync(skip: int = 0, limit: int = 5):
+    with SessionLocal() as session:
+        total = session.query(Subscriber).count()
+        subs = session.query(Subscriber).order_by(Subscriber.joined_at.desc()).offset(skip).limit(limit).all()
+        subs_list = [{
+            "user_id": s.user_id,
+            "first_name": s.first_name,
+            "username": s.username,
+            "joined_at": s.joined_at.isoformat()
+        } for s in subs]
+        return subs_list, total
+
+# --- Subscriber Async Wrappers ---
+async def add_subscriber(user_id: int, first_name: str = None, username: str = None) -> bool:
+    return await asyncio.to_thread(_add_subscriber_sync, user_id, first_name, username)
+
+async def remove_subscriber(user_id: int) -> bool:
+    return await asyncio.to_thread(_remove_subscriber_sync, user_id)
+
+async def is_subscriber(user_id: int) -> bool:
+    return await asyncio.to_thread(_is_subscriber_sync, user_id)
+
+async def get_subscriber_count() -> int:
+    return await asyncio.to_thread(_get_subscriber_count_sync)
+
+async def list_subscribers(skip: int = 0, limit: int = 5):
+    return await asyncio.to_thread(_list_subscribers_sync, skip, limit)

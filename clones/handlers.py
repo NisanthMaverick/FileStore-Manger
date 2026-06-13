@@ -4,12 +4,15 @@ import database
 from .helpers import (
     log_new_user_start, check_user_subscribed, get_clone_welcome_markup,
     handle_auto_delete_if_enabled, log_download_action,
-    copy_messages_with_start_end
+    copy_messages_with_start_end, check_clone_access
 )
 from .tree import show_user_tree
 
 async def clone_start_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    if not await check_clone_access(user_id):
+        await message.reply_text("❌ Access Denied. This bot is private. Please contact the administrator.")
+        return
     first_name = message.from_user.first_name
     username = message.from_user.username
     bot_me = client.me
@@ -43,6 +46,10 @@ async def clone_id_handler(client: Client, message: Message):
     await message.reply_text(f"🆔 **Your Telegram ID:** `{user_id}`")
 
 async def clone_explore_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    if not await check_clone_access(user_id):
+        await message.reply_text("❌ Access Denied. This bot is private. Please contact the administrator.")
+        return
     series_list = await database.list_series()
     text = "🎬 **Browse Categories & Series**\n\nSelect a series to browse:\n\n"
     buttons = []

@@ -4,13 +4,16 @@ import database
 from .helpers import (
     check_user_subscribed, get_clone_welcome_markup,
     handle_auto_delete_if_enabled, log_download_action,
-    copy_messages_with_start_end
+    copy_messages_with_start_end, check_clone_access
 )
 from .tree import show_user_tree
 from .handlers import handle_payload
 
 async def clone_callback_handler(client: Client, callback: CallbackQuery):
     user_id = callback.from_user.id
+    if not await check_clone_access(user_id):
+        await callback.answer("❌ Access Denied. This bot is private.", show_alert=True)
+        return
     data = callback.data
 
     if data.startswith("fsub_ref_"):

@@ -29,6 +29,7 @@ class Settings(Base):
     series_library_custom_msg = Column(Text, default=None)
     user_send_delay = Column(Integer, default=3)
     db_upload_delay = Column(Integer, default=3)
+    access_to_all = Column(Boolean, default=True)
 
 class CloneBot(Base):
     __tablename__ = "clone_bots"
@@ -78,6 +79,13 @@ class User(Base):
 class Admin(Base):
     __tablename__ = "admins"
     user_id = Column(BigInteger, primary_key=True)
+
+class Subscriber(Base):
+    __tablename__ = "subscribers"
+    user_id = Column(BigInteger, primary_key=True)
+    first_name = Column(String, nullable=True)
+    username = Column(String, nullable=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
 
 # Helper to initialize DB
 def db_init():
@@ -144,6 +152,10 @@ def db_init():
     if "db_upload_delay" not in columns_sett:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN db_upload_delay INTEGER DEFAULT 3"))
+            conn.commit()
+    if "access_to_all" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN access_to_all BOOLEAN DEFAULT TRUE"))
             conn.commit()
 
     # series columns check
