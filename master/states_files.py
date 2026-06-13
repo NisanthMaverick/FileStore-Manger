@@ -177,7 +177,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         
         new_sec_id = await database.create_section(name, series_id, parent_id=parent_id, sec_type="files")
 
-        ADMIN_STATES[user_id]["state"] = "waiting_for_start_marker"
+        ADMIN_STATES[user_id]["state"] = "waiting_for_tree_file_links"
         ADMIN_STATES[user_id]["data"]["section_id"] = new_sec_id
         ADMIN_STATES[user_id]["data"]["file_name"] = name
         ADMIN_STATES[user_id]["data"]["is_new_section"] = True
@@ -185,8 +185,15 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         ADMIN_STATES[user_id]["data"]["library_skip"] = library_skip
 
         text = (
-            f"📥 **{name}** — Step 1: Start Marker\n\n"
-            f"Please **forward the start message** from the source channel, or **paste the Telegram message link**:\n\n"
+            f"📥 **{name}** — Import Files\n\n"
+            "Please **forward a message** or send the **Telegram message link(s)** to import files.\n\n"
+            "**Format Guidelines:**\n"
+            "• **Single Link:** Paste a single link:\n"
+            "  `https://t.me/c/12345/100`\n"
+            "• **Range of Links:** Paste first and last links with a space:\n"
+            "  `https://t.me/c/12345/100 https://t.me/c/12345/110`\n"
+            "• **Multiple Ranges:** Separate multiple links or ranges with a `+` symbol:\n"
+            "  `link1 + link2 link3 + link4`\n\n"
             "❌ Send `/cancel` to abort."
         )
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])

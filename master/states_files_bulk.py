@@ -228,86 +228,99 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
         await show_series_browse(client, message.chat.id, progress_msg.id, series_id, section_id if section_id > 0 else None)
         return True
 
-    # 2. Waiting for Tree Start Marker
-    elif state == "waiting_for_start_marker":
-        chat_id, msg_id = None, None
+    # 2. Waiting for Tree File Links (replacing start/end marker)
+    elif state == "waiting_for_tree_file_links":
+        ranges = []
         forward_info = extract_msg_from_forward(message)
         if forward_info:
             chat_id, msg_id = forward_info
+            ranges.append({
+                "chat_id": chat_id,
+                "start_id": msg_id,
+                "end_id": msg_id
+            })
         elif message.text:
-            link_info = parse_tg_link(message.text)
-            if link_info:
-                chat_id, msg_id = link_info
-        
-        series_id = state_data["data"]["series_id"]
-        section_id = state_data["data"]["section_id"]
-        
-        if not chat_id or not msg_id:
-            await message.reply_text("❌ Invalid marker. Forward a message or paste a Telegram link.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
-            return True
-        
-        ADMIN_STATES[user_id]["state"] = "waiting_for_end_marker"
-        ADMIN_STATES[user_id]["data"]["start_chat_id"] = chat_id
-        ADMIN_STATES[user_id]["data"]["start_msg_id"] = msg_id
-        
-        text = (
-            "📤 **Add Files - Step 2: End Marker**\n\n"
-            f"Start Marker: Chat `{chat_id}` / Message `{msg_id}`\n\n"
-            "Please **forward the end message** from the SAME channel, or **paste its Telegram message link**:\n\n"
-            "❌ Send `/cancel` to abort."
-        )
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
-        
-        if message_id:
-            try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+            text = message.text.strip()
+            # Split by '+'
+            parts = [p.strip() for p in text.split('+') if p.strip()]
+            if not parts:
+                await message.reply_text("❌ Input cannot be empty. Try again or send /cancel.")
                 return True
-            except Exception:
-                pass
-        await message.reply_text(text, reply_markup=markup)
-        return True
+                
+            for part in parts:
+                tokens = part.split()
+                if not tokens:
+                    continue
+                if len(tokens) >= 2:
+                    t1, t2 = tokens[0], tokens[1]
+                    info1 = parse_tg_link(t1)
+                    info2 = parse_tg_link(t2)
+                    if not info1 or not info2:
+                        await message.reply_text(f"❌ Invalid links: `{t1}` or `{t2}`. Ensure they are valid Telegram message links.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+                        return True
+                    if info1[0] != info2[0]:
+                        await message.reply_text(f"❌ Links must be from the same chat:\n`{t1}`\n`{t2}`\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+                        return True
+                    if info2[1] < info1[1]:
+                        await message.reply_text(f"❌ End link message ID must be >= start link ID in:\n`{t1} {t2}`\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+                        return True
+                    ranges.append({
+                        "chat_id": info1[0],
+                        "start_id": info1[1],
+                        "end_id": info2[1]
+                    })
+                elif len(tokens) == 1:
+                    t1 = tokens[0]
+                    info1 = parse_tg_link(t1)
+                    if not info1:
+                        await message.reply_text(f"❌ Invalid link: `{t1}`.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+                        return True
+                    ranges.append({
+                        "chat_id": info1[0],
+                        "start_id": info1[1],
+                        "end_id": info1[1]
+                    })
+                else:
+                    await message.reply_text("❌ Invalid format. Use `link` or `startLink endLink`.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+                    return True
+        else:
+            await message.reply_text("❌ Invalid input type. Forward a message or send Telegram link(s).\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+            return True
 
-    # 3. Waiting for Tree End Marker
-    elif state == "waiting_for_end_marker":
-        chat_id, msg_id = None, None
-        forward_info = extract_msg_from_forward(message)
-        if forward_info:
-            chat_id, msg_id = forward_info
-        elif message.text:
-            link_info = parse_tg_link(message.text)
-            if link_info:
-                chat_id, msg_id = link_info
-        
+        if not ranges:
+            await message.reply_text("❌ No valid links found. Try again or send /cancel.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+            return True
+
         series_id = state_data["data"]["series_id"]
         section_id = state_data["data"]["section_id"]
-        start_chat_id = state_data["data"]["start_chat_id"]
-        start_msg_id = state_data["data"]["start_msg_id"]
-        
-        if not chat_id or not msg_id:
-            await message.reply_text("❌ Invalid marker. Forward a message or paste a Telegram link.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
-            return True
-        
-        if chat_id != start_chat_id:
-            await message.reply_text("❌ End marker must be from the same chat. Try again.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
-            return True
-        
-        if msg_id < start_msg_id:
-            await message.reply_text("❌ End message ID must be >= start message ID. Try again.\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
-            return True
-        
-        ADMIN_STATES.pop(user_id, None)
         parent_folder_id = state_data["data"].get("parent_folder_id")
         redirect_id = parent_folder_id if parent_folder_id is not None else section_id
         orig_msg_id = state_data.get("message_id")
-
         clear_before = state_data["data"].get("clear_before", True)
         custom_file_name = state_data["data"].get("file_name")
+        library_skip = state_data["data"].get("library_skip", 0)
+
+        ADMIN_STATES.pop(user_id, None)
+
         if orig_msg_id:
             try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text=f"⏳ **Importing files...**\nSource: `{chat_id}` │ Range: `{start_msg_id}` → `{msg_id}`")
+                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text=f"⏳ **Importing files...**\nProcessing ranges/links...")
             except Exception:
                 pass
-        asyncio.create_task(run_batch_copy(client, message.chat.id, orig_msg_id, chat_id, start_msg_id, msg_id, series_id, section_id, redirect_folder_id=redirect_id, clear_before=clear_before, custom_file_name=custom_file_name))
+        
+        from .batch import run_multi_range_copy
+        asyncio.create_task(run_multi_range_copy(
+            client=client,
+            admin_chat_id=message.chat.id,
+            progress_message_id=orig_msg_id,
+            ranges=ranges,
+            series_id=series_id,
+            section_id=section_id,
+            redirect_folder_id=redirect_id,
+            clear_before=clear_before,
+            custom_file_name=custom_file_name,
+            library_skip=library_skip
+        ))
         return True
 
     return False

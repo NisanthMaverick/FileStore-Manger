@@ -18,12 +18,22 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
         await callback.answer()
         sec = await database.get_section(section_id)
         parent_id = sec["parent_id"] if sec else None
-        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id}}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
         await callback.message.edit_text(
-            "📤 **Add Files - Step 1: Start Marker**\n\nPlease **forward the start message** from the source channel, or **paste the Telegram message link**:\n\n❌ Send `/cancel` to abort.",
+            f"📥 **{sec['name'] if sec else 'Files'}** — Import Files\n\n"
+            "Please **forward a message** or send the **Telegram message link(s)** to import files.\n\n"
+            "**Format Guidelines:**\n"
+            "• **Single Link:** Paste a single link:\n"
+            "  `https://t.me/c/12345/100`\n"
+            "• **Range of Links:** Paste first and last links with a space:\n"
+            "  `https://t.me/c/12345/100 https://t.me/c/12345/110`\n"
+            "• **Multiple Ranges:** Separate multiple links or ranges with a `+` symbol:\n"
+            "  `link1 + link2 link3 + link4`\n\n"
+            "❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
@@ -281,8 +291,19 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.answer()
         sec = await database.get_section(section_id)
         parent_id = sec["parent_id"] if sec else None
-        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": False, "library_skip": library_skip}}
-        await callback.message.edit_text("➕ **Add More Files — Step 1: Start Marker**\n\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": False, "library_skip": library_skip}}
+        await callback.message.edit_text(
+            f"➕ **Add More Files to: {sec['name'] if sec else 'Button'}**\n\n"
+            "Please **forward a message** or send the **Telegram message link(s)** to append files.\n\n"
+            "**Format Guidelines:**\n"
+            "• **Single Link:** Paste a single link:\n"
+            "  `https://t.me/c/12345/100`\n"
+            "• **Range of Links:** Paste first and last links with a space:\n"
+            "  `https://t.me/c/12345/100 https://t.me/c/12345/110`\n"
+            "• **Multiple Ranges:** Separate multiple links or ranges with a `+` symbol:\n"
+            "  `link1 + link2 link3 + link4`\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     elif data.startswith("filesec_replace_"):
@@ -293,8 +314,20 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.answer()
         sec = await database.get_section(section_id)
         parent_id = sec["parent_id"] if sec else None
-        ADMIN_STATES[user_id] = {"state": "waiting_for_start_marker", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
-        await callback.message.edit_text("🔄 **Replace All Files — Step 1: Start Marker**\n\n⚠️ Will delete existing files in this button.\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
+        await callback.message.edit_text(
+            f"🔄 **Replace All Files in: {sec['name'] if sec else 'Button'}**\n\n"
+            "⚠️ **WARNING:** This will delete existing files in this button!\n\n"
+            "Please **forward a message** or send the new **Telegram message link(s)**:\n\n"
+            "**Format Guidelines:**\n"
+            "• **Single Link:** Paste a single link:\n"
+            "  `https://t.me/c/12345/100`\n"
+            "• **Range of Links:** Paste first and last links with a space:\n"
+            "  `https://t.me/c/12345/100 https://t.me/c/12345/110`\n"
+            "• **Multiple Ranges:** Separate multiple links or ranges with a `+` symbol:\n"
+            "  `link1 + link2 link3 + link4`\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}_{library_skip}")]]))
         return True
 
     elif data.startswith("tree_add_type_folder_"):
