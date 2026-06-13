@@ -91,8 +91,9 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
         path_str += f" › {sec_path}"
 
     text = f"{path_str}\n"
-    if series['description'] and not section_id:
-        text += f"_{series['description']}_\n"
+    desc = series.get('description', '')
+    if desc and desc.strip() and desc.strip().lower() != 'none' and not section_id:
+        text += f"_{desc.strip()}_\n"
     text += "\n"
 
     per_row = 2
