@@ -189,11 +189,11 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             "Please **forward a message** or send the **Telegram message link(s)** to import files.\n\n"
             "**Format Guidelines:**\n"
             "• **Single Link:** Paste a single link:\n"
-            "  `https://t.me/c/12345/100`\n"
+            "  `https://t.me/c/12345/100` or `(https://t.me/c/12345/100)`\n"
             "• **Range of Links:** Paste first and last links with a space:\n"
-            "  `https://t.me/c/12345/100 https://t.me/c/12345/110`\n"
+            "  `https://t.me/c/12345/100 https://t.me/c/12345/110` or `(https://t.me/c/12345/100 https://t.me/c/12345/110)`\n"
             "• **Multiple Ranges:** Separate multiple links or ranges with a `+` symbol:\n"
-            "  `link1 + link2 link3 + link4`\n\n"
+            "  `link1 + (link2 link3) + link4`\n\n"
             "❌ Send `/cancel` to abort."
         )
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])

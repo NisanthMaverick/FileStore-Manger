@@ -67,7 +67,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                     continue
                 
                 first_part = sub_parts[0]
-                first_words = first_part.split()
+                first_words = [w.replace('(', '').replace(')', '').strip() for w in first_part.split()]
+                first_words = [w for w in first_words if w]
                 if len(first_words) >= 2:
                     last_word = first_words[-1]
                     sec_last_word = first_words[-2]
@@ -86,7 +87,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                         
                         valid = True
                         for part in sub_parts[1:]:
-                            part_words = part.split()
+                            part_words = [w.replace('(', '').replace(')', '').strip() for w in part.split()]
+                            part_words = [w for w in part_words if w]
                             if not part_words:
                                 continue
                             if len(part_words) >= 2 and is_telegram_link(part_words[-1]) and is_telegram_link(part_words[-2]):
@@ -248,7 +250,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 return True
                 
             for part in parts:
-                tokens = part.split()
+                tokens = [w.replace('(', '').replace(')', '').strip() for w in part.split()]
+                tokens = [w for w in tokens if w]
                 if not tokens:
                     continue
                 if len(tokens) >= 2:
