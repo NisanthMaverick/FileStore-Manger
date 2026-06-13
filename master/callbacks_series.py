@@ -59,6 +59,34 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, section_id)
         return True
 
+    elif data.startswith("move_folder_select_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        section_id = int(parts[4])
+        skip = int(parts[5])
+        await callback.answer()
+        from .ui_files import show_move_folder_menu
+        await show_move_folder_menu(client, callback.message.chat.id, callback.message.id, series_id, section_id, skip)
+        return True
+
+    elif data.startswith("move_folder_execute_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        section_id = int(parts[4])
+        target_val = parts[5]
+        
+        target_id = None if target_val == "root" else int(target_val)
+        
+        await callback.answer("📂 Moving folder...")
+        success = await database.update_section_parent(section_id, target_id)
+        if success:
+            await callback.answer("✅ Folder moved successfully!", show_alert=True)
+        else:
+            await callback.answer("❌ Failed to move folder.", show_alert=True)
+            
+        await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, section_id)
+        return True
+
     elif data.startswith("edit_sec_msg_"):
         parts = data.split("_")
         series_id = int(parts[3])

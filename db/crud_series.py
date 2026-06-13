@@ -280,3 +280,37 @@ async def delete_file(file_code: str):
 
 async def list_files(skip=0, limit=20, search=None, series_id=None, section_id=None, filter_root=False):
     return await asyncio.to_thread(_list_files_sync, skip, limit, search, series_id, section_id, filter_root)
+
+# --- Move Folder Sync Helpers ---
+def _update_section_parent_sync(section_id: int, parent_id: int = None) -> bool:
+    with SessionLocal() as session:
+        sec = session.query(SeriesSection).filter(SeriesSection.id == section_id).first()
+        if sec:
+            sec.parent_id = parent_id
+            session.commit()
+            return True
+        return False
+
+def _list_all_folders_sync(series_id: int):
+    with SessionLocal() as session:
+        folders = session.query(SeriesSection).filter(
+            SeriesSection.series_id == series_id,
+            SeriesSection.sec_type == "folder"
+        ).order_by(SeriesSection.id).all()
+        return [{
+            "id": f.id,
+            "name": f.name,
+            "series_id": f.series_id,
+            "parent_id": f.parent_id,
+            "sec_type": f.sec_type,
+            "custom_msg": f.custom_msg,
+            "buttons_per_row": f.buttons_per_row
+        } for f in folders]
+
+# --- Move Folder Async Helpers ---
+async def update_section_parent(section_id: int, parent_id: int = None) -> bool:
+    return await asyncio.to_thread(_update_section_parent_sync, section_id, parent_id)
+
+async def list_all_folders(series_id: int):
+    return await asyncio.to_thread(_list_all_folders_sync, series_id)
+

@@ -43,7 +43,7 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         "Configure folder settings or perform administrative actions below:"
     )
 
-    markup = InlineKeyboardMarkup([
+    buttons_list = [
         [
             InlineKeyboardButton("💬 Edit Message", callback_data=f"edit_sec_msg_{series_id}_{section_id}"),
             InlineKeyboardButton("🔢 Buttons Per Row", callback_data=f"edit_sec_cols_{series_id}_{section_id}")
@@ -51,11 +51,19 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         [
             InlineKeyboardButton("✏️ Rename", callback_data=f"rename_series_opt_{series_id}" if is_root else f"rename_sec_{series_id}_{section_id}"),
             InlineKeyboardButton("🗑 Delete", callback_data=f"tree_del_series_{series_id}" if is_root else f"tree_del_sec_{series_id}_{section_id}")
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Folder", callback_data=f"browse_sec_{series_id}_{section_id}")
         ]
+    ]
+
+    if not is_root:
+        buttons_list.append([
+            InlineKeyboardButton("📂 Move Folder", callback_data=f"move_folder_select_{series_id}_{section_id}_0")
+        ])
+
+    buttons_list.append([
+        InlineKeyboardButton("🔙 Back to Folder", callback_data=f"browse_sec_{series_id}_{section_id}")
     ])
+
+    markup = InlineKeyboardMarkup(buttons_list)
 
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
@@ -302,3 +310,75 @@ async def show_filesec_actions(client: Client, chat_id: int, message_id: int, se
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     except Exception as e:
         print(f"Error rendering filesec_actions: {e}")
+
+async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, skip: int = 0):
+    series = await database.get_series(series_id)
+    folder_to_move = await database.get_section(section_id)
+    if not series or not folder_to_move:
+        try:
+            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Folder or Series not found.")
+        except Exception:
+            pass
+        return
+
+    # Fetch all folders in this series
+    all_folders = await database.list_all_folders(series_id)
+    
+    # Exclude itself and any descendants to prevent loops
+    descendants = set()
+    
+    def add_descendants(parent_id):
+        for f in all_folders:
+            if f["parent_id"] == parent_id:
+                if f["id"] not in descendants:
+                    descendants.add(f["id"])
+                    add_descendants(f["id"])
+                    
+    descendants.add(section_id)
+    add_descendants(section_id)
+    
+    # Filter valid target folders
+    valid_folders = [f for f in all_folders if f["id"] not in descendants]
+    
+    text = (
+        f"📂 **Move Folder: {folder_to_move['name']}**\n\n"
+        f"Choose a new parent folder for **{folder_to_move['name']}** from the list below.\n"
+        "Select **Root (Top-Level)** to move it to the series root."
+    )
+    
+    buttons = []
+    
+    # Always allow moving to Root (Top-Level) if currently not at root
+    if folder_to_move["parent_id"] is not None:
+        buttons.append([
+            InlineKeyboardButton("📁 Root (Top-Level)", callback_data=f"move_folder_execute_{series_id}_{section_id}_root")
+        ])
+        
+    # Page valid folders
+    limit = 5
+    page_folders = valid_folders[skip:skip+limit]
+    
+    for f in page_folders:
+        prefix = "👉 " if f["id"] == folder_to_move["parent_id"] else "📁 "
+        buttons.append([
+            InlineKeyboardButton(f"{prefix}{f['name']}", callback_data=f"move_folder_execute_{series_id}_{section_id}_{f['id']}")
+        ])
+        
+    # Pagination
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"move_folder_select_{series_id}_{section_id}_{max(0, skip - limit)}"))
+    if skip + limit < len(valid_folders):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"move_folder_select_{series_id}_{section_id}_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([
+        InlineKeyboardButton("🔙 Cancel / Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}")
+    ])
+    
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering show_move_folder_menu: {e}")
+

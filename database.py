@@ -14,5 +14,6 @@ from db.crud_series import (
     create_section, get_section, list_sections, delete_section,
     get_section_path, update_section, clear_section_files,
     update_series_settings, update_section_settings, add_file,
-    get_file, delete_file, list_files
+    get_file, delete_file, list_files,
+    update_section_parent, list_all_folders
 )
