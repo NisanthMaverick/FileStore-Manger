@@ -157,3 +157,50 @@ async def handle_auto_delete_if_enabled(client: Client, chat_id: int, sent_messa
             print(f"Failed to send auto-delete warning: {e}")
         
         asyncio.create_task(delete_messages_delayed(client, chat_id, sent_message_ids, duration * 60))
+
+async def copy_messages_with_start_end(client: Client, user_id: int, db_channel: str, file_msg_ids: list) -> list:
+    settings = await database.get_settings()
+    dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
+    
+    sent_ids = []
+    
+    # 1. Send Start Message if enabled
+    if settings.get("start_end_msg_enabled") and settings.get("start_msg_db_id"):
+        try:
+            start_msg = await client.copy_message(
+                chat_id=user_id,
+                from_chat_id=dest_chat,
+                message_id=settings["start_msg_db_id"]
+            )
+            sent_ids.append(start_msg.id)
+        except Exception as e:
+            print(f"Failed to send start message: {e}")
+            
+    # 2. Send the files
+    user_delay = settings.get("user_send_delay", 3)
+    for idx, msg_id in enumerate(file_msg_ids):
+        if idx > 0 and user_delay > 0:
+            await asyncio.sleep(user_delay)
+        try:
+            msg = await client.copy_message(
+                chat_id=user_id,
+                from_chat_id=dest_chat,
+                message_id=msg_id
+            )
+            sent_ids.append(msg.id)
+        except Exception as e:
+            print(f"Failed to copy file message {msg_id}: {e}")
+            
+    # 3. Send End Message if enabled
+    if settings.get("start_end_msg_enabled") and settings.get("end_msg_db_id"):
+        try:
+            end_msg = await client.copy_message(
+                chat_id=user_id,
+                from_chat_id=dest_chat,
+                message_id=settings["end_msg_db_id"]
+            )
+            sent_ids.append(end_msg.id)
+        except Exception as e:
+            print(f"Failed to send end message: {e}")
+            
+    return sent_ids

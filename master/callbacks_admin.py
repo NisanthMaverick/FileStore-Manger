@@ -23,6 +23,23 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         await show_db_sync(client, callback.message.chat.id, callback.message.id)
         return True
 
+    elif data == "edit_db_upload_delay":
+        await callback.answer()
+        settings = await database.get_settings()
+        current_delay = settings.get("db_upload_delay", 3)
+        ADMIN_STATES[user_id] = {"state": "waiting_for_db_upload_delay", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "⏱ **Edit DB Bulk Upload Delay**\n\n"
+            "Enter the delay time in seconds (integer between `0` and `10`) to wait between storing/uploading files to the database.\n\n"
+            "Type `no` to disable delay (set to `0` seconds).\n\n"
+            f"Current Delay: `{current_delay}` second(s)\n"
+            "Default: `3` seconds\n"
+            "Max: `10` seconds\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="db_sync")]])
+        )
+        return True
+
     elif data == "sub_mgr":
         await callback.answer()
         await show_sub_mgr(client, callback.message.chat.id, callback.message.id)

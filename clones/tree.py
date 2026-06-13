@@ -64,17 +64,19 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         custom_msg = series.get("custom_msg")
         per_row = series.get("buttons_per_row", 2)
 
+    path_str = f"🎬 **{series['title']}**"
+    if section_id:
+        sec_path = await database.get_section_path(section_id)
+        path_str += f" › {sec_path}"
+
     if custom_msg:
-        text = custom_msg
+        text = f"{custom_msg}\n\n{path_str}\n"
     else:
-        path_str = f"🎬 **{series['title']}**"
-        if section_id:
-            sec_path = await database.get_section_path(section_id)
-            path_str += f" › {sec_path}"
         text = f"{path_str}\n"
-        if series['description'] and not section_id:
-            text += f"_{series['description']}_\n"
-        text += "\n"
+
+    if series['description'] and not section_id:
+        text += f"_{series['description']}_\n"
+    text += "\n"
 
     buttons = []
 

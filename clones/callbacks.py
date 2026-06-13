@@ -3,7 +3,8 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 import database
 from .helpers import (
     check_user_subscribed, get_clone_welcome_markup,
-    handle_auto_delete_if_enabled, log_download_action
+    handle_auto_delete_if_enabled, log_download_action,
+    copy_messages_with_start_end
 )
 from .tree import show_user_tree
 from .handlers import handle_payload
@@ -49,14 +50,10 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 if not files:
                     return await callback.answer("No files in this section yet.", show_alert=True)
                 await callback.answer(f"⏳ Sending {total_files} file(s)...")
-                dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
-                sent_msg_ids = []
-                for f in files:
-                    try:
-                        msg = await client.copy_message(chat_id=user_id, from_chat_id=dest_chat, message_id=f["message_id"])
-                        sent_msg_ids.append(msg.id)
-                    except Exception as e:
-                        print(f"Failed to send {f['file_code']}: {e}")
+                
+                file_msg_ids = [f["message_id"] for f in files]
+                sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, file_msg_ids)
+                
                 if sent_msg_ids:
                     await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
                 return
@@ -80,14 +77,9 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         await callback.answer(f"⏳ Sending {total_files} file(s)...")
 
-        dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
-        sent_msg_ids = []
-        for f in files:
-            try:
-                msg = await client.copy_message(chat_id=user_id, from_chat_id=dest_chat, message_id=f["message_id"])
-                sent_msg_ids.append(msg.id)
-            except Exception as e:
-                print(f"Failed to send file {f['file_code']}: {e}")
+        file_msg_ids = [f["message_id"] for f in files]
+        sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, file_msg_ids)
+        
         if sent_msg_ids:
             await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
 
@@ -111,12 +103,9 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         await callback.answer("Delivering episode...")
         try:
-            msg = await client.copy_message(
-                chat_id=user_id,
-                from_chat_id=int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel,
-                message_id=file_info["message_id"]
-            )
-            await handle_auto_delete_if_enabled(client, user_id, [msg.id])
+            sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, [file_info["message_id"]])
+            if sent_msg_ids:
+                await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
             
             fake_msg = callback.message
             fake_msg.from_user = callback.from_user
@@ -129,11 +118,21 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         skip = int(data.split("_")[3])
         await callback.answer()
         
+        settings = await database.get_settings()
+        limit = settings.get("series_buttons_per_page", 5)
+        library_msg = settings.get("series_library_custom_msg")
+        
         series_list = await database.list_series()
-        text = "🎬 **Browse Categories & Series**\n\nSelect a series to browse episodes:\n\n"
+        
+        header = "🎬 **Browse Categories & Series**\n\nSelect a series to browse episodes:\n\n"
+        if library_msg:
+            text = f"{library_msg}\n\n{header}"
+        else:
+            text = header
+            
         buttons = []
         
-        sliced_list = series_list[skip:skip+5]
+        sliced_list = series_list[skip:skip+limit]
         if not sliced_list:
             text += "_No series available._"
         else:
@@ -143,9 +142,9 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         
         pag_row = []
         if skip > 0:
-            pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cl_browse_series_{max(0, skip - 5)}"))
-        if skip + 5 < len(series_list):
-            pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_browse_series_{skip + 5}"))
+            pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cl_browse_series_{max(0, skip - limit)}"))
+        if skip + limit < len(series_list):
+            pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_browse_series_{skip + limit}"))
         if pag_row:
             buttons.append(pag_row)
             

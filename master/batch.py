@@ -5,9 +5,13 @@ from pyrogram.types import Message
 import database
 
 async def copy_files_silently(client: Client, db_channel: str, source_chat_id: int, start_id: int, end_id: int, series_id: int, section_id: int, file_name_prefix: str = None):
+    settings = await database.get_settings()
+    db_delay = settings.get("db_upload_delay", 3)
     dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
     is_source_db = (source_chat_id == dest_chat)
-    for current_id in range(start_id, end_id + 1):
+    for idx, current_id in enumerate(range(start_id, end_id + 1)):
+        if idx > 0 and db_delay > 0 and not is_source_db:
+            await asyncio.sleep(db_delay)
         try:
             if is_source_db:
                 copied_msg = await client.get_messages(chat_id=source_chat_id, message_ids=current_id)
@@ -48,6 +52,7 @@ async def copy_files_silently(client: Client, db_channel: str, source_chat_id: i
 async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id: int, source_chat_id: int, start_id: int, end_id: int, series_id: int, section_id: int, redirect_folder_id: int = None, clear_before: bool = True, custom_file_name: str = None):
     settings = await database.get_settings()
     db_channel = settings.get("db_channel_id")
+    db_delay = settings.get("db_upload_delay", 3)
     if not db_channel:
         try:
             await client.edit_message_text(chat_id=admin_chat_id, message_id=progress_message_id, text="❌ DB Storage Channel is not configured. Batch copy cancelled.")
@@ -68,7 +73,9 @@ async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id
     from .ui_files import show_series_browse
 
     try:
-        for current_id in range(start_id, end_id + 1):
+        for idx, current_id in enumerate(range(start_id, end_id + 1)):
+            if idx > 0 and db_delay > 0 and not is_source_db:
+                await asyncio.sleep(db_delay)
             if (copied_count + skipped_count) % 5 == 0 or (copied_count + skipped_count) == total_messages:
                 try:
                     action_word = "Linking" if is_source_db else "Copying"

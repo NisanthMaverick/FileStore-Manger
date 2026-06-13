@@ -22,6 +22,13 @@ class Settings(Base):
     log_channel_id = Column(String, default="")
     auto_delete_enabled = Column(Boolean, default=False)
     auto_delete_duration = Column(Integer, default=5)
+    series_buttons_per_page = Column(Integer, default=5)
+    start_end_msg_enabled = Column(Boolean, default=False)
+    start_msg_db_id = Column(Integer, nullable=True)
+    end_msg_db_id = Column(Integer, nullable=True)
+    series_library_custom_msg = Column(Text, default=None)
+    user_send_delay = Column(Integer, default=3)
+    db_upload_delay = Column(Integer, default=3)
 
 class CloneBot(Base):
     __tablename__ = "clone_bots"
@@ -37,6 +44,7 @@ class Series(Base):
     description = Column(Text, default="")
     custom_msg = Column(Text, nullable=True)
     buttons_per_row = Column(Integer, default=2)
+    display_order = Column(Integer, default=0)
 
 class SeriesSection(Base):
     __tablename__ = "series_sections"
@@ -109,6 +117,34 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN auto_delete_duration INTEGER DEFAULT 5"))
             conn.commit()
+    if "series_buttons_per_page" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN series_buttons_per_page INTEGER DEFAULT 5"))
+            conn.commit()
+    if "start_end_msg_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN start_end_msg_enabled BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "start_msg_db_id" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN start_msg_db_id INTEGER DEFAULT NULL"))
+            conn.commit()
+    if "end_msg_db_id" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN end_msg_db_id INTEGER DEFAULT NULL"))
+            conn.commit()
+    if "series_library_custom_msg" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN series_library_custom_msg TEXT DEFAULT NULL"))
+            conn.commit()
+    if "user_send_delay" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN user_send_delay INTEGER DEFAULT 3"))
+            conn.commit()
+    if "db_upload_delay" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN db_upload_delay INTEGER DEFAULT 3"))
+            conn.commit()
 
     # series columns check
     columns_ser = [c["name"] for c in inspector.get_columns("series")]
@@ -119,6 +155,10 @@ def db_init():
     if "buttons_per_row" not in columns_ser:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series ADD COLUMN buttons_per_row INTEGER DEFAULT 2"))
+            conn.commit()
+    if "display_order" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN display_order INTEGER DEFAULT 0"))
             conn.commit()
 
     # Auto-migrate: any section that owns file records must be sec_type='files'

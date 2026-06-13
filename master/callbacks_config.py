@@ -7,7 +7,8 @@ from .helpers import (
 )
 from .ui_config import (
     show_bot_config, show_auto_delete_menu, show_fsub_menu,
-    show_fsub_ch_details, show_btn_mgr, show_btn_details
+    show_fsub_ch_details, show_btn_mgr, show_btn_details,
+    show_start_end_msg_menu
 )
 
 async def handle_config_callbacks(client: Client, callback: CallbackQuery, data: str) -> bool:
@@ -16,6 +17,23 @@ async def handle_config_callbacks(client: Client, callback: CallbackQuery, data:
     if data == "bot_config":
         await callback.answer()
         await show_bot_config(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "edit_user_send_delay":
+        await callback.answer()
+        settings = await database.get_settings()
+        current_delay = settings.get("user_send_delay", 3)
+        ADMIN_STATES[user_id] = {"state": "waiting_for_user_send_delay", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "⏱ **Edit User File Delivery Delay**\n\n"
+            "Enter the delay time in seconds (integer between `0` and `10`) to wait between sending files to a user.\n\n"
+            "Type `no` to disable delay (set to `0` seconds).\n\n"
+            f"Current Delay: `{current_delay}` second(s)\n"
+            "Default: `3` seconds\n"
+            "Max: `10` seconds\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="bot_config")]])
+        )
         return True
 
     elif data == "edit_welcome":
@@ -161,6 +179,57 @@ async def handle_config_callbacks(client: Client, callback: CallbackQuery, data:
             "⏳ **Edit Auto Delete Duration**\n\nPlease enter the duration in minutes after which files will be deleted automatically (e.g. `5`):\n\n❌ Send /cancel to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="auto_delete_menu")]])
         )
+        return True
+
+    elif data == "start_end_msg_menu":
+        await callback.answer()
+        await show_start_end_msg_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "toggle_start_end_msg":
+        settings = await database.get_settings()
+        new_status = not settings.get("start_end_msg_enabled", False)
+        await database.update_settings({"start_end_msg_enabled": new_status})
+        await callback.answer(f"Start/End Messages toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_start_end_msg_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "set_start_msg":
+        settings = await database.get_settings()
+        if not settings.get("db_channel_id"):
+            await callback.answer("❌ Please configure DB Storage Channel first!", show_alert=True)
+            return True
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_start_msg", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "📤 **Set Start Message**\n\nPlease send or forward the message you want to set as the **Start Message**. It can be text, sticker, photo, video, etc.\n\n❌ Send /cancel to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="start_end_msg_menu")]])
+        )
+        return True
+
+    elif data == "set_end_msg":
+        settings = await database.get_settings()
+        if not settings.get("db_channel_id"):
+            await callback.answer("❌ Please configure DB Storage Channel first!", show_alert=True)
+            return True
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_end_msg", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "📥 **Set End Message**\n\nPlease send or forward the message you want to set as the **End Message**. It can be text, sticker, photo, video, etc.\n\n❌ Send /cancel to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="start_end_msg_menu")]])
+        )
+        return True
+
+    elif data == "del_start_msg":
+        await database.update_settings({"start_msg_db_id": None})
+        await callback.answer("Start message has been reset.", show_alert=True)
+        await show_start_end_msg_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "del_end_msg":
+        await database.update_settings({"end_msg_db_id": None})
+        await callback.answer("End message has been reset.", show_alert=True)
+        await show_start_end_msg_menu(client, callback.message.chat.id, callback.message.id)
         return True
 
     return False

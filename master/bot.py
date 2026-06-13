@@ -82,7 +82,7 @@ def register_main_bot_handlers(app: Client):
         data = callback.data
 
         if user_id in ADMIN_STATES:
-            if data not in ["tree_type_sec", "tree_type_files", "tree_cancel_btn"]:
+            if not (data.startswith("tree_add_type_") or data == "tree_cancel_btn" or data.startswith("reorder_toggle_") or data == "reorder_confirm" or data == "noop" or data.startswith("stop_bulk_add_")):
                 state_data = ADMIN_STATES.pop(user_id, None)
                 if state_data and "data" in state_data and state_data["data"].get("is_new_section"):
                     new_sec_id = state_data["data"]["section_id"]

@@ -20,6 +20,11 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
     auto_del_status = "Enabled ✅" if settings.get("auto_delete_enabled") else "Disabled ❌"
     auto_del_dur = settings.get("auto_delete_duration", 5)
 
+    start_end_status = "Enabled ✅" if settings.get("start_end_msg_enabled") else "Disabled ❌"
+    start_set = "Configured" if settings.get("start_msg_db_id") else "Not Set ❌"
+    end_set = "Configured" if settings.get("end_msg_db_id") else "Not Set ❌"
+
+    user_send_delay = settings.get("user_send_delay", 3)
     text = f"⚙️ **Bot Configurations**\n\n" \
            f"📝 **Welcome Message Template:**\n" \
            f"`{settings.get('welcome_msg')}`\n\n" \
@@ -29,6 +34,11 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
            f"⏱ **File Auto Delete Timer:**\n" \
            f"▪️ Status: {auto_del_status}\n" \
            f"▪️ Duration: `{auto_del_dur}` minute(s)\n\n" \
+           f"💬 **Start & End Messages:**\n" \
+           f"▪️ Status: {start_end_status}\n" \
+           f"▪️ Start Message: {start_set}\n" \
+           f"▪️ End Message: {end_set}\n\n" \
+           f"⏱ **User File Send Delay:** `{user_send_delay}` second(s)\n\n" \
            f"🔘 **Custom Buttons:**\n"
     
     buttons_list = json.loads(settings.get("custom_buttons", "[]"))
@@ -46,6 +56,10 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
         [
             InlineKeyboardButton("🔘 Custom Buttons Manager", callback_data="btn_mgr"),
             InlineKeyboardButton("⏱ File Auto Delete Timer", callback_data="auto_delete_menu")
+        ],
+        [
+            InlineKeyboardButton("💬 Start & End Messages", callback_data="start_end_msg_menu"),
+            InlineKeyboardButton("⏱ User Send Delay", callback_data="edit_user_send_delay")
         ],
         [
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")
@@ -224,3 +238,44 @@ async def show_btn_details(client: Client, chat_id: int, message_id: int, idx: i
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
         print(f"Error rendering btn_details: {e}")
+
+async def show_start_end_msg_menu(client: Client, chat_id: int, message_id: int):
+    settings = await database.get_settings()
+    enabled = settings.get("start_end_msg_enabled", False)
+    start_id = settings.get("start_msg_db_id")
+    end_id = settings.get("end_msg_db_id")
+
+    status_str = "Enabled ✅" if enabled else "Disabled ❌"
+    start_str = f"Set (ID: `{start_id}`)" if start_id else "Not Configured ❌"
+    end_str = f"Set (ID: `{end_id}`)" if end_id else "Not Configured ❌"
+
+    text = (
+        "💬 **Start & End Messages Settings**\n\n"
+        f"⚡ **Status:** {status_str}\n"
+        f"📤 **Start Message:** {start_str}\n"
+        f"📥 **End Message:** {end_str}\n\n"
+        "Configured messages will be sent to the user before and after the requested files are delivered."
+    )
+
+    toggle_btn_text = "🔴 Disable Messages" if enabled else "🟢 Enable Messages"
+    
+    buttons = [
+        [
+            InlineKeyboardButton(toggle_btn_text, callback_data="toggle_start_end_msg")
+        ],
+        [
+            InlineKeyboardButton("📤 Set Start Message", callback_data="set_start_msg"),
+            InlineKeyboardButton("📥 Set End Message", callback_data="set_end_msg")
+        ],
+        [
+            InlineKeyboardButton("🗑 Reset Start Message", callback_data="del_start_msg"),
+            InlineKeyboardButton("🗑 Reset End Message", callback_data="del_end_msg")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Bot Config", callback_data="bot_config")
+        ]
+    ]
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering start_end_msg_menu: {e}")

@@ -216,4 +216,167 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             await message.reply_text(text, reply_markup=markup)
         return True
 
+    elif state == "waiting_for_start_msg":
+        ADMIN_STATES.pop(user_id, None)
+        settings = await database.get_settings()
+        db_channel = settings.get("db_channel_id")
+        dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
+        
+        try:
+            copied = await message.copy(chat_id=dest_chat)
+            db_message_id = copied.id
+            await database.update_settings({"start_msg_db_id": db_message_id})
+            text = "✅ **Start Message configured successfully!**"
+        except Exception as e:
+            text = f"❌ **Failed to set Start Message:** {e}"
+
+        from .ui_config import show_start_end_msg_menu
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_start_end_msg_menu(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text)
+        return True
+
+    elif state == "waiting_for_end_msg":
+        ADMIN_STATES.pop(user_id, None)
+        settings = await database.get_settings()
+        db_channel = settings.get("db_channel_id")
+        dest_chat = int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel
+        
+        try:
+            copied = await message.copy(chat_id=dest_chat)
+            db_message_id = copied.id
+            await database.update_settings({"end_msg_db_id": db_message_id})
+            text = "✅ **End Message configured successfully!**"
+        except Exception as e:
+            text = f"❌ **Failed to set End Message:** {e}"
+
+        from .ui_config import show_start_end_msg_menu
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_start_end_msg_menu(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text)
+        return True
+
+    elif state == "waiting_for_series_pag_limit":
+        ADMIN_STATES.pop(user_id, None)
+        limit_text = message.text.strip() if message.text else ""
+        try:
+            limit = int(limit_text)
+            if limit < 1 or limit > 50:
+                raise ValueError("Limit must be between 1 and 50")
+            await database.update_settings({"series_buttons_per_page": limit})
+            text = f"✅ **Series Buttons per Page updated to {limit}!**"
+        except Exception as e:
+            text = f"❌ **Invalid number:** {e}"
+
+        from .ui_files import show_series_management_menu
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_series_management_menu(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text)
+        return True
+
+    elif state == "waiting_for_series_library_msg":
+        ADMIN_STATES.pop(user_id, None)
+        msg_text = message.text.strip() if message.text else ""
+        
+        if msg_text.lower() == "none":
+            await database.update_settings({"series_library_custom_msg": None})
+            text = "✅ **Series Library Custom Message reset successfully!**"
+        else:
+            await database.update_settings({"series_library_custom_msg": msg_text})
+            text = "✅ **Series Library Custom Message updated successfully!**"
+
+        from .ui_files import show_series_management_menu
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_series_management_menu(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text)
+        return True
+
+    elif state == "waiting_for_user_send_delay":
+        val = message.text.strip().lower() if message.text else ""
+        
+        if val == "no" or val == "no delay":
+            delay = 0
+        else:
+            if not val.isdigit() or int(val) < 0 or int(val) > 10:
+                text = "⚠️ **Invalid input.** Please enter an integer between `0` and `10`, or type `no` for no delay. Send `/cancel` to abort."
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="bot_config")]])
+                if message_id:
+                    try:
+                        await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+                        return True
+                    except Exception:
+                        pass
+                await message.reply_text(text, reply_markup=markup)
+                return True
+            delay = int(val)
+            
+        await database.update_settings({"user_send_delay": delay})
+        ADMIN_STATES.pop(user_id, None)
+        
+        from .ui_config import show_bot_config
+        text = f"✅ **User File Send Delay updated to `{delay}` second(s) successfully!**"
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_bot_config(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Configurations", callback_data="bot_config")]]))
+        return True
+
+    elif state == "waiting_for_db_upload_delay":
+        val = message.text.strip().lower() if message.text else ""
+        
+        if val == "no" or val == "no delay":
+            delay = 0
+        else:
+            if not val.isdigit() or int(val) < 0 or int(val) > 10:
+                text = "⚠️ **Invalid input.** Please enter an integer between `0` and `10`, or type `no` for no delay. Send `/cancel` to abort."
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="db_sync")]])
+                if message_id:
+                    try:
+                        await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+                        return True
+                    except Exception:
+                        pass
+                await message.reply_text(text, reply_markup=markup)
+                return True
+            delay = int(val)
+            
+        await database.update_settings({"db_upload_delay": delay})
+        ADMIN_STATES.pop(user_id, None)
+        
+        from .ui_admin import show_db_sync
+        text = f"✅ **DB Bulk Upload Delay updated to `{delay}` second(s) successfully!**"
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_db_sync(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Database Engine", callback_data="db_sync")]]))
+        return True
+
     return False

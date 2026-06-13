@@ -6,7 +6,8 @@ from .helpers import (
     ADMIN_STATES, log_admin_action, get_back_button
 )
 from .ui_files import (
-    show_folder_management, show_series_browse, show_manage_series, show_filesec_actions
+    show_folder_management, show_series_browse, show_manage_series, show_filesec_actions,
+    show_series_management_menu, show_series_reorder_menu
 )
 from .ui_config import show_auto_delete_menu
 
@@ -175,8 +176,23 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         series_id = int(parts[3])
         section_id = int(parts[4])
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_btn_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id}}
-        await callback.message.edit_text("➕ **Add Button**\n\nPlease enter the **Button Name**:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]]))
+        
+        text = (
+            "➕ **Add Button**\n\n"
+            "Select the button type:\n\n"
+            "📁 **Folder**: Opens a subfolder section for nested buttons.\n"
+            "📄 **File**: Directly delivers content/files to the user."
+        )
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📁 Folder", callback_data=f"tree_add_type_folder_{series_id}_{section_id}"),
+                InlineKeyboardButton("📄 File", callback_data=f"tree_add_type_file_{series_id}_{section_id}")
+            ],
+            [
+                InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}")
+            ]
+        ])
+        await callback.message.edit_text(text, reply_markup=markup)
         return True
 
     elif data.startswith("tree_bulk_add_"):
@@ -186,11 +202,24 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.answer()
         ADMIN_STATES[user_id] = {"state": "waiting_for_bulk_add", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id}}
         await callback.message.edit_text(
-            "📦 **Bulk Add Files & Folders**\n\nPaste your entries:\n"
-            "📁 Folders: `\"Season 1\",`\n"
-            "📥 Files: `EP(01) Link1 Link2,`\n\n❌ Send `/cancel` to abort.",
+            "📦 **Bulk Add Files & Folders**\n\n"
+            "Paste your entries (separated by newlines or commas):\n\n"
+            "📁 Folder: `\"Folder Name\"`\n"
+            "📥 File/Button: `Button Name startLink endLink`\n\n"
+            "💡 **Example:**\n"
+            "`\"Season 1\", Episode 01 startLink endLink, Episode 02 startLink endLink`\n\n"
+            "❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
+        return True
+
+    elif data.startswith("stop_bulk_add_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        section_id = int(parts[4])
+        await callback.answer("🛑 Stopping bulk creation...", show_alert=True)
+        if user_id in ADMIN_STATES and ADMIN_STATES[user_id].get("state") == "bulk_adding":
+            ADMIN_STATES[user_id]["cancel_requested"] = True
         return True
 
     elif data.startswith("filesec_act_"):
@@ -227,29 +256,26 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.message.edit_text("🔄 **Replace All Files — Step 1: Start Marker**\n\n⚠️ Will delete existing files in this button.\nForward start message or paste link:\n\n❌ Send `/cancel` to abort.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"filesec_act_{series_id}_{section_id}")]]))
         return True
 
-    elif data == "tree_type_sec":
+    elif data.startswith("tree_add_type_folder_"):
+        parts = data.split("_")
+        series_id = int(parts[4])
+        section_id = int(parts[5])
         await callback.answer()
-        state_data = ADMIN_STATES.get(user_id)
-        if not state_data or state_data["state"] != "waiting_for_tree_btn_type":
-            return True
-        series_id = state_data["data"]["series_id"]
-        parent_folder_id = state_data["data"]["parent_folder_id"]
-        button_name = state_data["data"]["button_name"]
-        parent_id = parent_folder_id if parent_folder_id > 0 else None
-        await database.create_section(button_name, series_id, parent_id=parent_id, sec_type="folder")
-        ADMIN_STATES.pop(user_id, None)
-        await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id > 0 else None)
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_folder_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id}}
+        await callback.message.edit_text(
+            "📁 **Create Folder**\n\nPlease enter the **Folder Name**:\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
+        )
         return True
 
-    elif data == "tree_type_files":
+    elif data.startswith("tree_add_type_file_"):
+        parts = data.split("_")
+        series_id = int(parts[4])
+        section_id = int(parts[5])
         await callback.answer()
-        state_data = ADMIN_STATES.get(user_id)
-        if not state_data or state_data["state"] != "waiting_for_tree_btn_type":
-            return True
-        ADMIN_STATES[user_id]["state"] = "waiting_for_tree_file_name"
-        button_name = state_data["data"]["button_name"]
+        ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_btn_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id}}
         await callback.message.edit_text(
-            f"📄 **Add File Button: {button_name}**\n\nPlease enter the **File Name**:\n\n❌ Send `/cancel` to abort.",
+            "📄 **Add File Button**\n\nPlease enter the **Button / File Name**:\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
@@ -283,6 +309,88 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
                     await show_filesec_actions(client, callback.message.chat.id, callback.message.id, series_id, section_id, sec, total_files)
                 else:
                     await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None)
+        return True
+
+    elif data == "series_management_menu":
+        await callback.answer()
+        ADMIN_STATES.pop(user_id, None)
+        await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "series_reorder_menu":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": []}}
+        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, selected_ids=[])
+        return True
+
+    elif data.startswith("reorder_toggle_"):
+        series_id = int(data.split("_")[2])
+        await callback.answer()
+        if user_id not in ADMIN_STATES or ADMIN_STATES[user_id].get("state") != "waiting_for_reorder":
+            ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": []}}
+        
+        selected_ids = ADMIN_STATES[user_id]["data"]["selected_ids"]
+        if series_id in selected_ids:
+            selected_ids.remove(series_id)
+        else:
+            selected_ids.append(series_id)
+            
+        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, selected_ids=selected_ids)
+        return True
+
+    elif data == "reorder_confirm":
+        if user_id not in ADMIN_STATES or ADMIN_STATES[user_id].get("state") != "waiting_for_reorder":
+            await callback.answer("❌ Error: Reordering session expired. Please start over.", show_alert=True)
+            await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+            return True
+            
+        selected_ids = ADMIN_STATES[user_id]["data"]["selected_ids"]
+        if len(selected_ids) < 2:
+            await callback.answer("Please select at least 2 series to reorder.", show_alert=True)
+            return True
+            
+        series_list = await database.list_series()
+        ordered_ids = []
+        ordered_ids.extend(selected_ids)
+        for s in series_list:
+            sid = s["id"]
+            if sid not in selected_ids:
+                ordered_ids.append(sid)
+                
+        for index, sid in enumerate(ordered_ids):
+            await database.update_series_settings(sid, display_order=index)
+            
+        ADMIN_STATES.pop(user_id, None)
+        await callback.answer("✅ Series list reordered successfully!", show_alert=True)
+        await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "edit_series_pag_limit":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_series_pag_limit", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "🔢 **Edit Series Buttons per Page**\n\nEnter the number of series buttons to display on a single page for users (e.g., `5`):\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="series_management_menu")]])
+        )
+        return True
+
+    elif data.startswith("manage_series_skip_"):
+        skip = int(data.split("_")[3])
+        await callback.answer()
+        await show_manage_series(client, callback.message.chat.id, callback.message.id, skip=skip)
+        return True
+
+    elif data == "edit_series_library_msg":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_series_library_msg", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "💬 **Edit Series Library Custom Message**\n\nEnter the custom display message to show above the series categories page. Send `none` to reset:\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="series_management_menu")]])
+        )
+        return True
+
+    elif data == "noop":
+        await callback.answer()
         return True
 
     return False

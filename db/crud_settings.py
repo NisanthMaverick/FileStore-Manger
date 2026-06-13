@@ -18,7 +18,14 @@ def _get_settings_sync():
             "db_channel_id": settings.db_channel_id,
             "log_channel_id": settings.log_channel_id,
             "auto_delete_enabled": settings.auto_delete_enabled,
-            "auto_delete_duration": settings.auto_delete_duration
+            "auto_delete_duration": settings.auto_delete_duration,
+            "series_buttons_per_page": settings.series_buttons_per_page,
+            "start_end_msg_enabled": settings.start_end_msg_enabled,
+            "start_msg_db_id": settings.start_msg_db_id,
+            "end_msg_db_id": settings.end_msg_db_id,
+            "series_library_custom_msg": settings.series_library_custom_msg,
+            "user_send_delay": settings.user_send_delay,
+            "db_upload_delay": settings.db_upload_delay
         }
 
 def _update_settings_sync(updates: dict):

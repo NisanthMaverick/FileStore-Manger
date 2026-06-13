@@ -97,19 +97,21 @@ def _get_series_sync(series_id: int):
                 "title": s.title,
                 "description": s.description,
                 "custom_msg": s.custom_msg,
-                "buttons_per_row": s.buttons_per_row
+                "buttons_per_row": s.buttons_per_row,
+                "display_order": s.display_order
             }
         return None
 
 def _list_series_sync():
     with SessionLocal() as session:
-        series_list = session.query(Series).order_by(Series.title).all()
+        series_list = session.query(Series).order_by(Series.display_order.asc(), Series.title.asc()).all()
         return [{
             "id": s.id,
             "title": s.title,
             "description": s.description,
             "custom_msg": s.custom_msg,
-            "buttons_per_row": s.buttons_per_row
+            "buttons_per_row": s.buttons_per_row,
+            "display_order": s.display_order
         } for s in series_list]
 
 def _delete_series_sync(series_id: int):
@@ -197,7 +199,7 @@ def _clear_section_files_sync(section_id: int):
         session.query(FileRecord).filter(FileRecord.section_id == section_id).delete()
         session.commit()
 
-def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None) -> bool:
+def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None) -> bool:
     with SessionLocal() as session:
         s = session.query(Series).filter(Series.id == series_id).first()
         if s:
@@ -209,6 +211,8 @@ def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_ro
                 s.title = title
             if description is not None:
                 s.description = description
+            if display_order is not None:
+                s.display_order = display_order
             session.commit()
             return True
         return False
@@ -259,8 +263,8 @@ async def update_section(section_id: int, name: str) -> bool:
 async def clear_section_files(section_id: int):
     await asyncio.to_thread(_clear_section_files_sync, section_id)
 
-async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None):
-    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description)
+async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None):
+    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order)
 
 async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None):
     return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row)

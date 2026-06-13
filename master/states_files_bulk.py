@@ -9,6 +9,12 @@ from .helpers import (
 from .ui_files import show_series_browse
 from .batch import copy_files_silently, run_batch_copy
 
+def is_telegram_link(token: str) -> bool:
+    token_lower = token.lower().strip()
+    if "t.me/" in token_lower or token_lower.startswith("http://") or token_lower.startswith("https://"):
+        return True
+    return parse_tg_link(token) is not None
+
 async def handle_bulk_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
@@ -30,10 +36,12 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 await message.reply_text("❌ DB Storage Channel is not configured.")
             return True
 
-        raw_entries = re.split(r',\s*\n?', bulk_text)
+        # Replace newlines with commas so we support both newline and comma separation
+        bulk_text_commas = bulk_text.replace('\n', ',')
+        raw_items = [item.strip().rstrip(',. ') for item in bulk_text_commas.split(',') if item.strip()]
+        
         parsed_entries = []
-        for item in raw_entries:
-            item = item.strip()
+        for item in raw_items:
             if not item:
                 continue
             if item.startswith('"') and item.endswith('"'):
@@ -42,39 +50,67 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                     parsed_entries.append({"type": "folder", "name": folder_name})
             else:
                 parts = item.split()
-                if len(parts) >= 3:
-                    end_link = parts[-1]
-                    start_link = parts[-2]
-                    button_name = " ".join(parts[:-2]).strip()
-                    parsed_entries.append({
-                        "type": "file",
-                        "name": button_name,
-                        "start_link": start_link,
-                        "end_link": end_link
-                    })
+                if len(parts) >= 2:
+                    last_word = parts[-1]
+                    sec_last_word = parts[-2]
+                    
+                    if is_telegram_link(last_word):
+                        if is_telegram_link(sec_last_word):
+                            end_link = last_word
+                            start_link = sec_last_word
+                            button_name = " ".join(parts[:-2]).strip()
+                        else:
+                            end_link = last_word
+                            start_link = last_word
+                            button_name = " ".join(parts[:-1]).strip()
+                            
+                        parsed_entries.append({
+                            "type": "file",
+                            "name": button_name,
+                            "start_link": start_link,
+                            "end_link": end_link
+                        })
 
         if not parsed_entries:
-            await message.reply_text("⚠️ No valid entries found. Format should be:\nFolders: `\"Folder Name\",`\nFiles: `ButtonName startLink endLink,`\n\nTry again or send /cancel.")
+            await message.reply_text(
+                "⚠️ **No valid entries found.**\n\n"
+                "Please enter items separated by commas or newlines:\n"
+                "📁 Folder: `\"Folder Name\"`\n"
+                "📥 File: `Button Name startLink endLink`\n\n"
+                "Try again or send `/cancel`."
+            )
             return True
 
-        ADMIN_STATES.pop(user_id, None)
         total_entries = len(parsed_entries)
         initial_text = f"⏳ **Creating buttons...**\n\nProgress: 0/{total_entries}"
         progress_msg = None
+        
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Stop Creation", callback_data=f"stop_bulk_add_{series_id}_{section_id}")]])
+        
         if message_id:
             try:
-                progress_msg = await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=initial_text)
+                progress_msg = await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=initial_text, reply_markup=reply_markup)
             except Exception:
                 pass
 
         if not progress_msg:
-            progress_msg = await message.reply_text(initial_text)
+            progress_msg = await message.reply_text(initial_text, reply_markup=reply_markup)
+
+        ADMIN_STATES[user_id] = {
+            "state": "bulk_adding",
+            "message_id": progress_msg.id,
+            "cancel_requested": False
+        }
 
         parent_id = section_id if section_id > 0 else None
         status_lines = []
         completed = 0
 
         for entry in parsed_entries:
+            if user_id in ADMIN_STATES and ADMIN_STATES[user_id].get("cancel_requested"):
+                status_lines.append("🛑 **Creation stopped by admin.**")
+                break
+                
             if entry["type"] == "folder":
                 name = entry["name"]
                 try:
@@ -108,15 +144,23 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
             display_lines = status_lines[-10:]
             progress_text = f"⏳ **Creating buttons...**\n\n" + "\n".join(display_lines) + f"\n\nProgress: {completed}/{total_entries}"
             try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=progress_text)
+                await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=progress_text, reply_markup=reply_markup)
             except Exception:
                 pass
             await asyncio.sleep(0.2)
 
+        ADMIN_STATES.pop(user_id, None)
+
         final_lines = status_lines
         if len(final_lines) > 20:
             final_lines = final_lines[:10] + ["..."] + final_lines[-10:]
-        success_text = f"✅ **Bulk creation completed successfully!**\n\n" + "\n".join(final_lines) + f"\n\nProgress: {total_entries}/{total_entries}"
+            
+        is_stopped = any("stopped" in line.lower() for line in status_lines)
+        if is_stopped:
+            success_text = f"🛑 **Bulk creation stopped!**\n\n" + "\n".join(final_lines) + f"\n\nProgress: {completed}/{total_entries}"
+        else:
+            success_text = f"✅ **Bulk creation completed successfully!**\n\n" + "\n".join(final_lines) + f"\n\nProgress: {total_entries}/{total_entries}"
+            
         try:
             await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=success_text)
         except Exception:

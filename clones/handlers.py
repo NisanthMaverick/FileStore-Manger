@@ -3,7 +3,8 @@ from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from .helpers import (
     log_new_user_start, check_user_subscribed, get_clone_welcome_markup,
-    handle_auto_delete_if_enabled, log_download_action
+    handle_auto_delete_if_enabled, log_download_action,
+    copy_messages_with_start_end
 )
 from .tree import show_user_tree
 
@@ -100,13 +101,10 @@ async def handle_payload(client: Client, message: Message, payload: str):
 
         status_msg = await message.reply_text("🔄 Retrieving file from database...")
         try:
-            msg = await client.copy_message(
-                chat_id=user_id,
-                from_chat_id=int(db_channel) if db_channel.startswith("-100") or db_channel.isdigit() else db_channel,
-                message_id=file_info["message_id"]
-            )
+            sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, [file_info["message_id"]])
             await status_msg.delete()
-            await handle_auto_delete_if_enabled(client, user_id, [msg.id])
+            if sent_msg_ids:
+                await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
             await log_download_action(client, file_info, message)
         except Exception as e:
             print(f"Failed to copy file message: {e}")

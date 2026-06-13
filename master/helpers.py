@@ -102,9 +102,20 @@ def parse_tg_link(link: str):
     parts = link.split("/")
     if len(parts) < 2:
         return None
+        
+    if parts[0] == "c" and len(parts) >= 3:
+        try:
+            chat_id = int("-100" + parts[1])
+            msg_id = int(parts[2])
+            return chat_id, msg_id
+        except ValueError:
+            return None
+            
     chat_username = parts[0]
     try:
         msg_id = int(parts[1])
+        if chat_username.isdigit():
+            chat_username = int("-100" + chat_username)
         return chat_username, msg_id
     except ValueError:
         return None

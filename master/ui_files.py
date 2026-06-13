@@ -137,24 +137,127 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
     except Exception as e:
         print(f"Error rendering show_series_browse: {e}")
 
-async def show_manage_series(client: Client, chat_id: int, message_id: int):
+async def show_manage_series(client: Client, chat_id: int, message_id: int, skip: int = 0):
+    settings = await database.get_settings()
+    limit = settings.get("series_buttons_per_page", 5)
+    
     series_list = await database.list_series()
     text = "🎬 **Video Series Library**\n\nSelect a series to browse:\n\n"
     buttons = []
     
-    if not series_list:
-        text += "_No series created yet._"
+    sliced_list = series_list[skip:skip+limit]
+    if not sliced_list:
+        text += "_No series created yet or page is empty._"
     else:
-        for s in series_list:
+        for s in sliced_list:
             buttons.append([
                 InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0")
             ])
+            
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"manage_series_skip_{max(0, skip - limit)}"))
+    if skip + limit < len(series_list):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"manage_series_skip_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
     
+    buttons.append([
+        InlineKeyboardButton("⚙️ Series Management", callback_data="series_management_menu")
+    ])
     buttons.append(get_back_button("manage_files"))
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
         print(f"Error rendering manage_series: {e}")
+
+async def show_series_management_menu(client: Client, chat_id: int, message_id: int):
+    settings = await database.get_settings()
+    limit = settings.get("series_buttons_per_page", 5)
+    custom_msg = settings.get("series_library_custom_msg")
+    msg_status = "Set ✅" if custom_msg else "Not Set ❌"
+    
+    text = (
+        "⚙️ **Series Library Management**\n\n"
+        f"🔢 **User Series Pagination Limit:** `{limit}` buttons per page\n"
+        f"💬 **Library Custom Message:** {msg_status}\n\n"
+        "Choose a configuration option below:"
+    )
+    
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔢 Edit Buttons per Page", callback_data="edit_series_pag_limit"),
+            InlineKeyboardButton("💬 Edit Library Message", callback_data="edit_series_library_msg")
+        ],
+        [
+            InlineKeyboardButton("↕️ Reorder Series List", callback_data="series_reorder_menu")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering series_management_menu: {e}")
+
+async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int, selected_ids: list = None):
+    if selected_ids is None:
+        selected_ids = []
+        
+    def get_number_emoji(num: int) -> str:
+        emojis = {
+            1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣",
+            6: "6️⃣", 7: "7️⃣", 8: "8️⃣", 9: "9️⃣", 10: "🔟"
+        }
+        return emojis.get(num, f"[{num}]")
+        
+    series_list = await database.list_series()
+    text = (
+        "↕️ **Reorder Video Series**\n\n"
+        "Select the series in the order you want them to display. "
+        "Selected ones will show first (in selection sequence), and remaining unselected series will follow in their current relative order:\n\n"
+    )
+    
+    if selected_ids:
+        text += "📝 **Current Selection Order:**\n"
+        for idx, sid in enumerate(selected_ids):
+            for s in series_list:
+                if s["id"] == sid:
+                    text += f"{get_number_emoji(idx + 1)} {s['title']}\n"
+                    break
+        text += "\n"
+        
+    buttons = []
+    
+    for s in series_list:
+        sid = s["id"]
+        is_selected = sid in selected_ids
+        
+        display_title = s["title"]
+        if is_selected:
+            idx = selected_ids.index(sid)
+            checkbox_text = get_number_emoji(idx + 1)
+        else:
+            checkbox_text = "⬜"
+            
+        row = [
+            InlineKeyboardButton(f"🎬 {display_title}", callback_data="noop"),
+            InlineKeyboardButton(checkbox_text, callback_data=f"reorder_toggle_{sid}")
+        ]
+        buttons.append(row)
+        
+    if len(selected_ids) >= 2:
+        buttons.append([
+            InlineKeyboardButton(f"✅ Confirm Reorder ({len(selected_ids)} selected)", callback_data="reorder_confirm")
+        ])
+        
+    buttons.append([InlineKeyboardButton("🔙 Back to Series Management", callback_data="series_management_menu")])
+    
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering show_series_reorder_menu: {e}")
 
 async def show_manage_files(client: Client, chat_id: int, message_id: int):
     markup = InlineKeyboardMarkup([

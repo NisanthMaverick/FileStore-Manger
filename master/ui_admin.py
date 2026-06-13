@@ -7,10 +7,12 @@ async def show_db_sync(client: Client, chat_id: int, message_id: int):
     settings = await database.get_settings()
     db_channel = settings.get("db_channel_id") or "_Not configured_"
     log_channel = settings.get("log_channel_id") or "_Not configured_"
+    db_upload_delay = settings.get("db_upload_delay", 3)
     
     text = f"🔄 **Database Sync & Integrity Engine**\n\n" \
            f"📁 **Storage Channel:** `{db_channel}`\n" \
-           f"📝 **Audit Log Channel:** `{log_channel}`\n\n" \
+           f"📝 **Audit Log Channel:** `{log_channel}`\n" \
+           f"⏱ **DB Upload Delay:** `{db_upload_delay}` second(s)\n\n" \
            f"Manage connection bindings and scan file indices consistency."
     
     db_btn_text = "📁 Edit/Remove Storage Channel" if settings.get("db_channel_id") else "📁 Configure Storage Channel"
@@ -25,7 +27,8 @@ async def show_db_sync(client: Client, chat_id: int, message_id: int):
             InlineKeyboardButton(log_btn_text, callback_data=log_btn_cb)
         ],
         [
-            InlineKeyboardButton("🔄 Run File Integrity Scan", callback_data="run_integrity")
+            InlineKeyboardButton("🔄 Run File Integrity Scan", callback_data="run_integrity"),
+            InlineKeyboardButton("⏱ DB Upload Delay", callback_data="edit_db_upload_delay")
         ],
         [
             InlineKeyboardButton("⚡ Restart DB", callback_data="restart_db_conn"),

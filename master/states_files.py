@@ -138,71 +138,56 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             await message.reply_text(f"✅ Series '{title}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")]]))
         return True
 
-    # 4. Waiting for Tree Button Name
-    elif state == "waiting_for_tree_btn_name":
+    # 4. Waiting for Tree Folder Name
+    elif state == "waiting_for_tree_folder_name":
         name = message.text.strip()
         if not name:
-            await message.reply_text("⚠️ Button name cannot be empty. Try again or send /cancel.")
+            await message.reply_text("⚠️ Folder name cannot be empty. Try again or send /cancel.")
             return True
         
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
-        ADMIN_STATES[user_id]["state"] = "waiting_for_tree_btn_type"
-        ADMIN_STATES[user_id]["data"]["button_name"] = name
-
-        text = (
-            f"➕ **Add Button: {name}**\n\n"
-            "Select the button type:\n\n"
-            "📁 **Folder**: Opens a subfolder section for nested buttons.\n"
-            "📄 **File**: Directly delivers content/files to the user."
-        )
-        markup = InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("📁 Folder", callback_data="tree_type_sec"),
-                InlineKeyboardButton("📄 File", callback_data="tree_type_files")
-            ],
-            [
-                InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")
-            ]
-        ])
-
+        parent_id = parent_folder_id if parent_folder_id > 0 else None
+        
+        await database.create_section(name, series_id, parent_id=parent_id, sec_type="folder")
+        ADMIN_STATES.pop(user_id, None)
+        
         if message_id:
             try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
+                # show browse view
+                await show_series_browse(client, message.chat.id, message_id, series_id, parent_folder_id if parent_folder_id > 0 else None)
                 return True
             except Exception:
                 pass
-        await message.reply_text(text, reply_markup=markup)
+        await message.reply_text(f"✅ Folder '{name}' created successfully!")
         return True
 
-    # 5. Waiting for Tree File Name
-    elif state == "waiting_for_tree_file_name":
-        file_name = message.text.strip()
-        if not file_name:
-            await message.reply_text("⚠️ File name cannot be empty. Try again or send /cancel.")
+    # 5. Waiting for Tree File Button Name
+    elif state == "waiting_for_tree_file_btn_name":
+        name = message.text.strip()
+        if not name:
+            await message.reply_text("⚠️ Button/File name cannot be empty. Try again or send /cancel.")
             return True
 
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
-        button_name = state_data["data"]["button_name"]
-
         parent_id = parent_folder_id if parent_folder_id > 0 else None
-        new_sec_id = await database.create_section(button_name, series_id, parent_id=parent_id, sec_type="files")
+        
+        new_sec_id = await database.create_section(name, series_id, parent_id=parent_id, sec_type="files")
 
         ADMIN_STATES[user_id]["state"] = "waiting_for_start_marker"
         ADMIN_STATES[user_id]["data"]["section_id"] = new_sec_id
-        ADMIN_STATES[user_id]["data"]["file_name"] = file_name
+        ADMIN_STATES[user_id]["data"]["file_name"] = name
         ADMIN_STATES[user_id]["data"]["is_new_section"] = True
         ADMIN_STATES[user_id]["data"]["clear_before"] = True
 
         text = (
-            f"📥 **{button_name}** — Step 1: Start Marker\n\n"
-            f"File Name: `{file_name}`\n\n"
-            "Forward the **first message** from the source channel, or paste its Telegram link:\n\n"
+            f"📥 **{name}** — Step 1: Start Marker\n\n"
+            f"Please **forward the start message** from the source channel, or **paste the Telegram message link**:\n\n"
             "❌ Send `/cancel` to abort."
         )
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
-
+        
         if message_id:
             try:
                 await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
