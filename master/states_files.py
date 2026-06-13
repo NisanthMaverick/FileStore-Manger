@@ -105,37 +105,21 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
     # 2. Waiting for Series Title
     elif state == "waiting_for_series_title":
         title = message.text.strip()
-        ADMIN_STATES[user_id] = {
-            "state": "waiting_for_series_desc",
-            "message_id": message_id,
-            "data": {"title": title}
-        }
-        text = f"🎬 Series Title set to: **{title}**\n\nNow send the **Series Description** (or send 'none' for empty):"
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="manage_series")]])
-        if message_id:
-            try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=text, reply_markup=markup)
-                return True
-            except Exception:
-                pass
-        await message.reply_text(text, reply_markup=markup)
-        return True
-
-    # 3. Waiting for Series Description
-    elif state == "waiting_for_series_desc":
-        desc = message.text.strip()
-        if desc.lower() == "none":
-            desc = ""
+        if not title:
+            await message.reply_text("⚠️ Title cannot be empty. Try again or send /cancel.")
+            return True
         
-        title = state_data["data"]["title"]
-        series_id = await database.create_series(title, desc)
+        series_id = await database.create_series(title, "")
         ADMIN_STATES.pop(user_id, None)
         await log_admin_action(f"📂 **Series Created**: {title} (ID: {series_id}) by {message.from_user.mention}")
         
         if message_id:
-            await show_manage_series(client, message.chat.id, message_id)
-        else:
-            await message.reply_text(f"✅ Series '{title}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")]]))
+            try:
+                await show_manage_series(client, message.chat.id, message_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Series '{title}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")]]))
         return True
 
     # 4. Waiting for Tree Folder Name

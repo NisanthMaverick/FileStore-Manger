@@ -51,6 +51,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
         merged_lines = []
         for line in lines:
             line = line.strip()
+            if '#' in line:
+                line = line.split('#', 1)[0].strip()
             if not line:
                 continue
             if merged_lines and (merged_lines[-1].endswith('+') or line.startswith('+')):
@@ -251,6 +253,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
             })
         elif message.text:
             text = message.text.strip()
+            if '#' in text:
+                text = text.split('#', 1)[0].strip()
             # Split by '+'
             parts = [p.strip() for p in text.split('+') if p.strip()]
             if not parts:
