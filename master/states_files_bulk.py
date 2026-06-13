@@ -36,8 +36,21 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 await message.reply_text("❌ DB Storage Channel is not configured.")
             return True
 
+        # Pre-process: merge lines that have '+' at the boundary
+        lines = bulk_text.split('\n')
+        merged_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if merged_lines and (merged_lines[-1].endswith('+') or line.startswith('+')):
+                merged_lines[-1] = (merged_lines[-1] + " " + line).strip()
+            else:
+                merged_lines.append(line)
+        processed_text = "\n".join(merged_lines)
+
         # Replace newlines with commas so we support both newline and comma separation
-        bulk_text_commas = bulk_text.replace('\n', ',')
+        bulk_text_commas = processed_text.replace('\n', ',')
         raw_items = [item.strip().rstrip(',. ') for item in bulk_text_commas.split(',') if item.strip()]
         
         parsed_entries = []
@@ -49,27 +62,53 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 if folder_name:
                     parsed_entries.append({"type": "folder", "name": folder_name})
             else:
-                parts = item.split()
-                if len(parts) >= 2:
-                    last_word = parts[-1]
-                    sec_last_word = parts[-2]
+                sub_parts = [part.strip() for part in item.split('+') if part.strip()]
+                if not sub_parts:
+                    continue
+                
+                first_part = sub_parts[0]
+                first_words = first_part.split()
+                if len(first_words) >= 2:
+                    last_word = first_words[-1]
+                    sec_last_word = first_words[-2]
                     
                     if is_telegram_link(last_word):
                         if is_telegram_link(sec_last_word):
                             end_link = last_word
                             start_link = sec_last_word
-                            button_name = " ".join(parts[:-2]).strip()
+                            button_name = " ".join(first_words[:-2]).strip()
                         else:
                             end_link = last_word
                             start_link = last_word
-                            button_name = " ".join(parts[:-1]).strip()
+                            button_name = " ".join(first_words[:-1]).strip()
                             
-                        parsed_entries.append({
-                            "type": "file",
-                            "name": button_name,
-                            "start_link": start_link,
-                            "end_link": end_link
-                        })
+                        ranges = [{"start_link": start_link, "end_link": end_link}]
+                        
+                        valid = True
+                        for part in sub_parts[1:]:
+                            part_words = part.split()
+                            if not part_words:
+                                continue
+                            if len(part_words) >= 2 and is_telegram_link(part_words[-1]) and is_telegram_link(part_words[-2]):
+                                ranges.append({
+                                    "start_link": part_words[-2],
+                                    "end_link": part_words[-1]
+                                })
+                            elif len(part_words) >= 1 and is_telegram_link(part_words[-1]):
+                                ranges.append({
+                                    "start_link": part_words[-1],
+                                    "end_link": part_words[-1]
+                                })
+                            else:
+                                valid = False
+                                break
+                        
+                        if valid:
+                            parsed_entries.append({
+                                "type": "file",
+                                "name": button_name,
+                                "ranges": ranges
+                            })
 
         if not parsed_entries:
             await message.reply_text(
@@ -120,22 +159,41 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                     status_lines.append(f"❌ {name} (Error: {e})")
             elif entry["type"] == "file":
                 name = entry["name"]
-                start_link = entry["start_link"]
-                end_link = entry["end_link"]
+                ranges = entry["ranges"]
 
-                start_info = parse_tg_link(start_link)
-                end_info = parse_tg_link(end_link)
+                # Validate all ranges first
+                validated_ranges = []
+                has_error = False
+                error_msg = ""
 
-                if not start_info or not end_info:
-                    status_lines.append(f"❌ {name} (Invalid links)")
-                elif start_info[0] != end_info[0]:
-                    status_lines.append(f"❌ {name} (Links from different chats)")
-                elif end_info[1] < start_info[1]:
-                    status_lines.append(f"❌ {name} (End link is before start link)")
+                for r in ranges:
+                    start_link = r["start_link"]
+                    end_link = r["end_link"]
+                    start_info = parse_tg_link(start_link)
+                    end_info = parse_tg_link(end_link)
+
+                    if not start_info or not end_info:
+                        has_error = True
+                        error_msg = "Invalid links"
+                        break
+                    elif start_info[0] != end_info[0]:
+                        has_error = True
+                        error_msg = "Links from different chats"
+                        break
+                    elif end_info[1] < start_info[1]:
+                        has_error = True
+                        error_msg = "End link is before start link"
+                        break
+                    else:
+                        validated_ranges.append((start_info[0], start_info[1], end_info[1]))
+
+                if has_error:
+                    status_lines.append(f"❌ {name} ({error_msg})")
                 else:
                     try:
                         new_sec_id = await database.create_section(name, series_id, parent_id=parent_id, sec_type="files")
-                        await copy_files_silently(client, db_channel, start_info[0], start_info[1], end_info[1], series_id, new_sec_id, name)
+                        for source_chat_id, start_msg_id, end_msg_id in validated_ranges:
+                            await copy_files_silently(client, db_channel, source_chat_id, start_msg_id, end_msg_id, series_id, new_sec_id, name)
                         status_lines.append(f"✅ {name}")
                     except Exception as e:
                         status_lines.append(f"❌ {name} (Copy error: {e})")
