@@ -53,6 +53,47 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                 await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
         return
 
+    # Check if series is inactive (premium lock) and user is not premium
+    from config import OWNER_ID
+    if not series.get("is_active", True):
+        is_user_premium = await database.is_premium_user(chat_id, OWNER_ID)
+        if not is_user_premium:
+            owner_username = None
+            try:
+                owner_user = await client.get_users(OWNER_ID)
+                if owner_user and owner_user.username:
+                    owner_username = owner_user.username
+            except Exception:
+                pass
+            contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+            
+            text = (
+                "🔒 **Premium Access Required**\n\n"
+                "You are not a premium user to see old series/content.\n"
+                "Please buy a subscription or contact the administrator if you have any issues."
+            )
+            markup = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                    InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+                ],
+                [
+                    InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
+                ],
+                [
+                    InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")
+                ]
+            ])
+            if is_new_message:
+                await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+            else:
+                try:
+                    await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+                except Exception:
+                    await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+            return
+
+
     sections = await database.list_sections(series_id, parent_id=section_id)
 
     custom_msg = None
@@ -88,9 +129,8 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     if sections:
         settings = await database.get_settings()
         from config import OWNER_ID
-        is_premium = False
-        if await database.is_admin(chat_id, OWNER_ID) or await database.is_subscriber(chat_id):
-            is_premium = True
+        is_premium = await database.is_premium_user(chat_id, OWNER_ID)
+
 
         lock_enabled = settings.get("lock_buttons_enabled", False)
         window = settings.get("lock_time_window", 0)

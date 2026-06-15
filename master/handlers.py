@@ -16,6 +16,43 @@ async def start_handler(client: Client, message: Message):
     if is_new:
         await log_new_user_start(client, message)
     
+    # Extract payload if any
+    payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
+
+    if payload.startswith("premium_") or payload == "premium":
+        is_premium = await database.is_premium_user(user_id, OWNER_ID)
+        if is_premium:
+            channels = await database.get_remote_channels()
+            if channels:
+                chan_text = "\n".join([f"🔹 [{c['title']}]({c['invite_link']})" for c in channels])
+                msg_text = (
+                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
+                    "Your premium subscription is active. You now have full access to this bot.\n\n"
+                    "📺 **Join our Premium Channels:**\n"
+                    f"{chan_text}\n\n"
+                    "🚀 Use /explorefiles or search for files directly to start downloading!"
+                )
+                buttons = []
+                for c in channels:
+                    buttons.append([InlineKeyboardButton(f"📺 Join {c['title']}", url=c['invite_link'])])
+                markup = InlineKeyboardMarkup(buttons)
+            else:
+                msg_text = (
+                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
+                    "Your premium subscription is active. You now have full access to this bot.\n\n"
+                    "🚀 Use /explorefiles or search for files directly to start downloading!"
+                )
+                markup = None
+            await message.reply_text(msg_text, reply_markup=markup, disable_web_page_preview=True)
+            return
+        else:
+            await message.reply_text(
+                "❌ **Premium Activation Failed**\n\n"
+                "We could not verify an active premium subscription for your account.\n"
+                "If you recently paid, please wait a moment for approval or contact admin."
+            )
+            return
+
     # Check if user is admin
     is_user_admin = await database.is_admin(user_id, OWNER_ID)
     if not is_user_admin:

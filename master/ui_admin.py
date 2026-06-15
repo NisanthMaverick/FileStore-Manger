@@ -150,14 +150,18 @@ async def show_bot_details(client: Client, chat_id: int, message_id: int, bot: d
 async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
     total_users = await database.get_user_count()
     sub_count = await database.get_subscriber_count()
+    premium_count = await database.get_premium_cache_count()
     settings = await database.get_settings()
     
     access_status = "Enabled 🔓" if settings.get("access_to_all", True) else "Disabled (Restricted to Subscribers) 🔒"
+    testing_mode_status = "Enabled 🧪 (Premium access blocked)" if settings.get("testing_mode", False) else "Disabled ❌"
     
     text = f"👥 **User & Subscribers Management**\n\n" \
            f"📈 **Total Users (database):** `{total_users}`\n" \
            f"⭐ **Subscribed Users:** `{sub_count}`\n" \
-           f"🔓 **Clone Bot Access Mode:** `{access_status}`\n\n" \
+           f"💎 **Premium Users (Cached):** `{premium_count}`\n" \
+           f"🔓 **Clone Bot Access Mode:** `{access_status}`\n" \
+           f"🧪 **Testing Mode Status:** `{testing_mode_status}`\n\n" \
            f"Select an option below to manage subscribers and access permissions:"
            
     toggle_text = "🔒 Restrict Access to Subs" if settings.get("access_to_all", True) else "🔓 Enable Access to All"
@@ -165,6 +169,9 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
         [
             InlineKeyboardButton("➕ Subscribe User", callback_data="add_subscriber"),
             InlineKeyboardButton("🗑 Remove Subscriber", callback_data="remove_subscriber_menu_0")
+        ],
+        [
+            InlineKeyboardButton("💎 Premium Users Panel", callback_data="premium_users_panel")
         ],
         [
             InlineKeyboardButton(toggle_text, callback_data="toggle_access_to_all")
@@ -180,6 +187,34 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     except Exception as e:
         print(f"Error rendering sub_mgr: {e}")
+
+async def show_premium_users_panel(client: Client, chat_id: int, message_id: int):
+    premium_count = await database.get_premium_cache_count()
+    settings = await database.get_settings()
+    testing_mode_status = "Enabled 🧪 (Premium access blocked)" if settings.get("testing_mode", False) else "Disabled ❌ (Premium access allowed)"
+    
+    text = "💎 **Premium Users Control Panel**\n\n" \
+           "This bot integrates with the Subscription Bot. Users with plan 1 or 3 are premium users.\n\n" \
+           f"💎 **Total Active Cached Premium Users:** `{premium_count}`\n" \
+           f"🧪 **Testing Mode:** {testing_mode_status}\n\n" \
+           "Select an option below:"
+           
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔄 Sync Premium Users", callback_data="sync_premium_users")
+        ],
+        [
+            InlineKeyboardButton("🧪 Toggle Testing Mode", callback_data="toggle_testing_mode")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back", callback_data="sub_mgr")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering premium_users_panel: {e}")
+
 
 async def show_remove_subscriber_menu(client: Client, chat_id: int, message_id: int, skip: int = 0):
     subs, total = await database.list_subscribers(skip=skip, limit=5)

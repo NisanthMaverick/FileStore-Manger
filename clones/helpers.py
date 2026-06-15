@@ -227,8 +227,9 @@ async def check_clone_access(user_id: int) -> bool:
     if settings.get("access_to_all", True):
         return True
         
-    is_sub = await database.is_subscriber(user_id)
-    return is_sub
+    is_premium = await database.is_premium_user(user_id, OWNER_ID)
+    return is_premium
+
 
 async def send_clone_access_denied(client: Client, message: Message):
     from config import OWNER_ID

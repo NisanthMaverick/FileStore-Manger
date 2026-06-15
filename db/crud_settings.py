@@ -1,6 +1,11 @@
+import time
 import asyncio
-from .models import SessionLocal, Settings, CloneBot, User, Admin, Subscriber
+import psycopg2
+from .models import SessionLocal, Settings, CloneBot, User, Admin, Subscriber, RemotePremiumCache
 from datetime import datetime
+from config import SUBSCRIPTION_DATABASE_URL
+
+
 
 def _get_settings_sync():
     with SessionLocal() as session:
@@ -30,7 +35,8 @@ def _get_settings_sync():
             "access_to_all": settings.access_to_all,
             "lock_buttons_enabled": settings.lock_buttons_enabled,
             "protect_content_enabled": settings.protect_content_enabled,
-            "lock_time_window": settings.lock_time_window
+            "lock_time_window": settings.lock_time_window,
+            "testing_mode": settings.testing_mode
         }
 
 def _update_settings_sync(updates: dict):
@@ -218,3 +224,239 @@ async def get_subscriber_count() -> int:
 
 async def list_subscribers(skip: int = 0, limit: int = 5):
     return await asyncio.to_thread(_list_subscribers_sync, skip, limit)
+
+
+# --- Premium & Sync Management with Memory Caching ---
+
+# In-memory premium check cache to make clone bot page transitions/checks extremely fast
+# Keys: user_id (int)
+# Values: (is_premium: bool, expiry_time: float)
+USER_PREMIUM_MEMORY_CACHE = {}
+
+def clear_user_premium_mem_cache(user_id: int = None):
+    global USER_PREMIUM_MEMORY_CACHE
+    if user_id:
+        USER_PREMIUM_MEMORY_CACHE.pop(user_id, None)
+    else:
+        USER_PREMIUM_MEMORY_CACHE.clear()
+
+def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
+    global USER_PREMIUM_MEMORY_CACHE
+    
+    # 1. Bot owner is always premium
+    if user_id == owner_id:
+        return True
+
+    # 2. Check if admin
+    with SessionLocal() as session:
+        admin = session.query(Admin).filter(Admin.user_id == user_id).first()
+        if admin:
+            return True
+
+        # 3. Check if local subscriber (manual premium subscriber)
+        sub = session.query(Subscriber).filter(Subscriber.user_id == user_id).first()
+        if sub:
+            return True
+
+        # 4. Check in-memory cache first to avoid DB query overhead
+        now_ts = time.time()
+        if user_id in USER_PREMIUM_MEMORY_CACHE:
+            is_prem, exp_ts = USER_PREMIUM_MEMORY_CACHE[user_id]
+            if now_ts < exp_ts:
+                return is_prem
+
+        # 5. Check if testing_mode is enabled. If enabled, we treat cached remote premium users as normal (return False)
+        settings = session.query(Settings).first()
+        if settings and settings.testing_mode:
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (False, now_ts + 60.0) # cache negative result for 60s
+            return False
+
+        # 6. Check local DB cache
+        cache_rec = session.query(RemotePremiumCache).filter(RemotePremiumCache.user_id == user_id).first()
+        if cache_rec and cache_rec.expiry_date:
+            try:
+                expiry = datetime.strptime(cache_rec.expiry_date, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
+                if expiry >= datetime.now():
+                    USER_PREMIUM_MEMORY_CACHE[user_id] = (True, now_ts + 300.0) # cache for 5 minutes
+                    return True
+            except Exception:
+                pass
+
+        # 7. Auto-Identify: User is not active in local cache. Check remote DB dynamically.
+        # If psycopg2 queries and finds a valid subscription, cache it locally.
+        is_remote_active = _sync_single_premium_user_sync(user_id)
+        if is_remote_active:
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (True, now_ts + 300.0) # cache for 5 minutes
+            return True
+        else:
+            # Cache negative result for 120 seconds to prevent hammering the remote DB on every page click
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (False, now_ts + 120.0)
+            return False
+
+
+def _sync_premium_users_sync() -> int:
+    """
+    Connects to the remote Subscriptionbot database, fetches all active plan 1/3 subscriptions,
+    and bulk-replaces the local remote_premium_cache table.
+    Returns the count of synced active subscriptions.
+    """
+    if not SUBSCRIPTION_DATABASE_URL:
+        print("Error: SUBSCRIPTION_DATABASE_URL not configured.")
+        return 0
+
+    conn = None
+    try:
+        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        with conn.cursor() as cursor:
+            # Query active subscriptions for plan ID 1 or 3
+            cursor.execute("""
+                SELECT user_id, plan_id, plan_name, expiry_date, status
+                FROM subscriptions
+                WHERE plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+            """)
+            rows = cursor.fetchall()
+            
+            # Write to local cache
+            with SessionLocal() as session:
+                # 1. Clear existing cache
+                session.query(RemotePremiumCache).delete()
+                
+                # 2. Bulk insert active ones
+                count = 0
+                for r in rows:
+                    uid, plan_id, plan_name, expiry_str, status = r
+                    # Validate expiry date is not already passed
+                    try:
+                        expiry = datetime.strptime(expiry_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
+                        if expiry >= datetime.now():
+                            cache_rec = RemotePremiumCache(
+                                user_id=uid,
+                                plan_id=plan_id,
+                                plan_name=plan_name,
+                                expiry_date=expiry_str,
+                                last_checked=datetime.utcnow()
+                            )
+                            session.add(cache_rec)
+                            count += 1
+                    except Exception:
+                        pass
+                session.commit()
+                # Clear all user in-memory cache to force refresh
+                clear_user_premium_mem_cache()
+                return count
+    except Exception as e:
+        print(f"Error during remote sync: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
+def _sync_single_premium_user_sync(user_id: int) -> bool:
+    """
+    Connects to the remote Subscriptionbot database, queries the active subscription for a specific user,
+    and updates the local cache table.
+    Returns True if user has an active premium subscription, False otherwise.
+    """
+    if not SUBSCRIPTION_DATABASE_URL:
+        return False
+
+    conn = None
+    try:
+        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT user_id, plan_id, plan_name, expiry_date, status
+                FROM subscriptions
+                WHERE user_id = %s AND plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+                ORDER BY sub_id DESC LIMIT 1
+            """, (user_id,))
+            r = cursor.fetchone()
+            
+            with SessionLocal() as session:
+                if r:
+                    uid, plan_id, plan_name, expiry_str, status = r
+                    try:
+                        expiry = datetime.strptime(expiry_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
+                        if expiry >= datetime.now():
+                            # Update or insert
+                            cache_rec = session.query(RemotePremiumCache).filter(RemotePremiumCache.user_id == user_id).first()
+                            if not cache_rec:
+                                cache_rec = RemotePremiumCache(user_id=user_id)
+                                session.add(cache_rec)
+                            cache_rec.plan_id = plan_id
+                            cache_rec.plan_name = plan_name
+                            cache_rec.expiry_date = expiry_str
+                            cache_rec.last_checked = datetime.utcnow()
+                            session.commit()
+                            clear_user_premium_mem_cache(user_id)
+                            return True
+                    except Exception:
+                        pass
+                
+                # If no active subscription returned or it is expired, delete local cache if any
+                cache_rec = session.query(RemotePremiumCache).filter(RemotePremiumCache.user_id == user_id).first()
+                if cache_rec:
+                    session.delete(cache_rec)
+                    session.commit()
+                clear_user_premium_mem_cache(user_id)
+                return False
+    except Exception as e:
+        print(f"Error syncing single user {user_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def _get_premium_cache_count_sync() -> int:
+    with SessionLocal() as session:
+        # Check active cached users (unexpired)
+        count = 0
+        caches = session.query(RemotePremiumCache).all()
+        for c in caches:
+            if c.expiry_date:
+                try:
+                    expiry = datetime.strptime(c.expiry_date, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
+                    if expiry >= datetime.now():
+                        count += 1
+                except Exception:
+                    pass
+        return count
+
+
+# --- Async wrappers ---
+async def is_premium_user(user_id: int, owner_id: int) -> bool:
+    return await asyncio.to_thread(_is_premium_user_sync, user_id, owner_id)
+
+async def sync_premium_users() -> int:
+    return await asyncio.to_thread(_sync_premium_users_sync)
+
+async def sync_single_premium_user(user_id: int) -> bool:
+    return await asyncio.to_thread(_sync_single_premium_user_sync, user_id)
+
+async def get_premium_cache_count() -> int:
+    return await asyncio.to_thread(_get_premium_cache_count_sync)
+
+
+def _get_remote_channels_sync():
+    if not SUBSCRIPTION_DATABASE_URL:
+        return []
+    conn = None
+    try:
+        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT title, invite_link FROM premium_channels WHERE invite_link IS NOT NULL AND invite_link != ''")
+            rows = cursor.fetchall()
+            return [{"title": r[0], "invite_link": r[1]} for r in rows]
+    except Exception as e:
+        print(f"Error fetching remote channels: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+async def get_remote_channels():
+    return await asyncio.to_thread(_get_remote_channels_sync)
+
+

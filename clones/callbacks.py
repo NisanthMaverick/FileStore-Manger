@@ -40,9 +40,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         series_id = int(data.split("_")[2])
         series = await database.get_series(series_id)
         if series and not series.get("is_active", True):
-            is_user_premium = False
-            if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
-                is_user_premium = True
+            is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
             
             if not is_user_premium:
                 await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
@@ -58,11 +56,19 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 text = (
                     "🔒 **Premium Access Required**\n\n"
                     "You are not a premium user to see old series/content.\n"
-                    "If you want old series, please contact the administrator."
+                    "Please buy a subscription or contact the administrator if you have any issues."
                 )
                 markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)],
-                    [InlineKeyboardButton("🔙 Back to Series Library", callback_data="cl_browse_series_0")]
+                    [
+                        InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                        InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+                    ],
+                    [
+                        InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
+                    ],
+                    [
+                        InlineKeyboardButton("🔙 Back to Series Library", callback_data="cl_browse_series_0")
+                    ]
                 ])
                 await callback.message.edit_text(text, reply_markup=markup)
                 return
@@ -138,9 +144,8 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             return await callback.answer("Storage channel not configured by admin.", show_alert=True)
 
         if settings.get("lock_buttons_enabled"):
-            is_user_premium = False
-            if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
-                is_user_premium = True
+            is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+
             
             if not is_user_premium:
                 # Check if parent series is active. If inactive, it's locked.
@@ -201,9 +206,8 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             
         buttons = []
         
-        is_user_premium = False
-        if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
-            is_user_premium = True
+        is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+
 
         sliced_list = series_list[skip:skip+limit]
         if not sliced_list:
@@ -250,4 +254,55 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         await callback.message.edit_text(welcome_text, reply_markup=InlineKeyboardMarkup(full_markup))
 
     elif data.startswith("cl_locked_sec_"):
-        await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
+        parts = data.split("_")
+        series_id = int(parts[3])
+        sec_id = int(parts[4])
+        
+        sec = await database.get_section(sec_id)
+        parent_id = sec["parent_id"] if sec else None
+        
+        owner_username = None
+        try:
+            owner_user = await client.get_users(OWNER_ID)
+            if owner_user and owner_user.username:
+                owner_username = owner_user.username
+        except Exception:
+            pass
+        contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+        
+        text = (
+            "🔒 **Premium Access Required**\n\n"
+            "You are not a premium user to see old files/episodes.\n"
+            "Please buy a subscription or contact the administrator if you have any issues."
+        )
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+            ],
+            [
+                InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_{sec_id}")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}")
+            ]
+        ])
+        await callback.message.edit_text(text, reply_markup=markup)
+
+    elif data.startswith("cl_chk_sub_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        sec_id = int(parts[4])
+        
+        await callback.answer("🔄 Checking subscription status...", show_alert=False)
+        is_now_premium = await database.sync_single_premium_user(user_id)
+        
+        if is_now_premium:
+            await callback.answer("✅ Verification successful! You are now premium.", show_alert=True)
+            if sec_id > 0:
+                await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id)
+            else:
+                await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
+        else:
+            await callback.answer("❌ No active subscription found for your ID (Plan 1 or 3 required).", show_alert=True)
+

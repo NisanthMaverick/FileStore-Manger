@@ -11,7 +11,8 @@ from .helpers import (
 from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
     get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr,
-    show_remove_subscriber_menu, show_lock_settings, show_active_series_config
+    show_remove_subscriber_menu, show_lock_settings, show_active_series_config,
+    show_premium_users_panel
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -45,6 +46,29 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         await callback.answer()
         await show_sub_mgr(client, callback.message.chat.id, callback.message.id)
         return True
+
+    elif data == "premium_users_panel":
+        await callback.answer()
+        await show_premium_users_panel(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "sync_premium_users":
+        await callback.answer("🔄 Syncing premium users from remote DB...", show_alert=False)
+        count = await database.sync_premium_users()
+        await callback.answer(f"✅ Synced {count} premium user(s) successfully!", show_alert=True)
+        await show_premium_users_panel(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "toggle_testing_mode":
+        await callback.answer()
+        settings = await database.get_settings()
+        new_val = not settings.get("testing_mode", False)
+        await database.update_settings({"testing_mode": new_val})
+        status_str = "Enabled 🧪" if new_val else "Disabled ❌"
+        await callback.answer(f"🧪 Testing Mode: {status_str}", show_alert=True)
+        await show_premium_users_panel(client, callback.message.chat.id, callback.message.id)
+        return True
+
 
     elif data == "toggle_access_to_all":
         await callback.answer()

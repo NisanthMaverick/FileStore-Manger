@@ -33,6 +33,8 @@ class Settings(Base):
     lock_buttons_enabled = Column(Boolean, default=False)
     protect_content_enabled = Column(Boolean, default=False)
     lock_time_window = Column(Integer, default=0)
+    testing_mode = Column(Boolean, default=False)
+
 
 class CloneBot(Base):
     __tablename__ = "clone_bots"
@@ -94,6 +96,15 @@ class Subscriber(Base):
     first_name = Column(String, nullable=True)
     username = Column(String, nullable=True)
     joined_at = Column(DateTime, default=datetime.utcnow)
+
+class RemotePremiumCache(Base):
+    __tablename__ = "remote_premium_cache"
+    user_id = Column(BigInteger, primary_key=True)
+    plan_id = Column(Integer, nullable=True)
+    plan_name = Column(String, nullable=True)
+    expiry_date = Column(String, nullable=True)
+    last_checked = Column(DateTime, default=datetime.utcnow)
+
 
 # Helper to initialize DB
 def db_init():
@@ -185,6 +196,11 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN lock_time_window INTEGER DEFAULT 0"))
             conn.commit()
+    if "testing_mode" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN testing_mode BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+
 
     # series columns check
     columns_ser = [c["name"] for c in inspector.get_columns("series")]
