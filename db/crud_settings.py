@@ -308,11 +308,11 @@ def _sync_premium_users_sync() -> int:
     try:
         conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
         with conn.cursor() as cursor:
-            # Query active subscriptions for plan ID 1 or 3
+            # Query active subscriptions for plan ID 1
             cursor.execute("""
                 SELECT user_id, plan_id, plan_name, expiry_date, status
                 FROM subscriptions
-                WHERE plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+                WHERE plan_id = 1 AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
             """)
             rows = cursor.fetchall()
             
@@ -368,7 +368,7 @@ def _sync_single_premium_user_sync(user_id: int) -> bool:
             cursor.execute("""
                 SELECT user_id, plan_id, plan_name, expiry_date, status
                 FROM subscriptions
-                WHERE user_id = %s AND plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+                WHERE user_id = %s AND plan_id = 1 AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
                 ORDER BY sub_id DESC LIMIT 1
             """, (user_id,))
             r = cursor.fetchone()

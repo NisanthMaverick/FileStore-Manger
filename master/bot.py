@@ -26,7 +26,7 @@ import database
 from config import OWNER_ID
 from . import helpers as main_helpers
 from .helpers import ADMIN_STATES
-from .handlers import start_handler, cancel_handler, id_handler, explore_handler
+from .handlers import start_handler, cancel_handler, id_handler, explore_handler, master_available_series_handler
 
 def register_main_bot_handlers(app: Client):
     main_helpers.main_bot_client = app
@@ -48,8 +48,12 @@ def register_main_bot_handlers(app: Client):
     async def cmd_explore(client: Client, message: Message):
         await explore_handler(client, message)
 
+    @app.on_message(filters.command("availableseries") & filters.private)
+    async def cmd_avail_series(client: Client, message: Message):
+        await master_available_series_handler(client, message)
+
     # --- Private Messages State Input Handler ---
-    @app.on_message(filters.private & ~filters.command(["start", "cancel", "id", "explorefiles"]))
+    @app.on_message(filters.private & ~filters.command(["start", "cancel", "id", "explorefiles", "availableseries"]))
     async def msg_state(client: Client, message: Message):
         user_id = message.from_user.id
         if user_id not in ADMIN_STATES:

@@ -304,5 +304,5 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             else:
                 await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
         else:
-            await callback.answer("❌ No active subscription found for your ID (Plan 1 or 3 required).", show_alert=True)
+            await callback.answer("❌ No active premium subscription found for your ID (Plan 1 required).", show_alert=True)
 

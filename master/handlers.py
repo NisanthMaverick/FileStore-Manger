@@ -36,6 +36,9 @@ async def start_handler(client: Client, message: Message):
                 "If you recently paid, please wait a moment for approval or contact admin."
             )
             return
+    elif payload == "availableseries":
+        await master_available_series_handler(client, message)
+        return
 
     # Check if user is admin
     is_user_admin = await database.is_admin(user_id, OWNER_ID)
@@ -59,6 +62,37 @@ async def start_handler(client: Client, message: Message):
         "🛠 **Master Admin Control Panel** 🛠\n\nSelect a category below to configure and manage the bot:",
         reply_markup=get_main_panel_markup()
     )
+
+async def master_available_series_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    is_user_admin = await database.is_admin(user_id, OWNER_ID)
+    if is_user_admin:
+        series_list = await database.list_series()
+        if not series_list:
+            await message.reply_text("🎬 **No series available at the moment.**")
+            return
+        text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a series to browse:\n\n"
+        buttons = []
+        for s in series_list:
+            text += f"▪️ **{s['title']}**\n"
+            if s.get('description'):
+                text += f"   └ _{s['description']}_\n"
+            buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0")])
+        buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="welcome_back")])
+        await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        settings = await database.get_settings()
+        primary = settings.get("primary_clone_username")
+        if primary:
+            clean_primary = primary.lstrip("@")
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("Go to Series Bot 🤖", url=f"https://t.me/{clean_primary}?start=availableseries")]])
+            await message.reply_text(
+                "🎬 **Available Series List**\n\n"
+                "To view and download our series collection, please use our main clone bot by clicking the button below:",
+                reply_markup=markup
+            )
+        else:
+            await message.reply_text("Browse features are only available in clone bots. Please contact admin to get a clone bot link.")
 
 async def cancel_handler(client: Client, message: Message):
     user_id = message.from_user.id

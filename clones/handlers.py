@@ -71,6 +71,37 @@ async def clone_explore_handler(client: Client, message: Message):
     buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")])
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
+async def clone_available_series_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    if not await check_clone_access(user_id):
+        await send_clone_access_denied(client, message)
+        return
+    
+    series_list = await database.list_series()
+    if not series_list:
+        await message.reply_text("🎬 **No series available at the moment.**\n\nCheck back later!")
+        return
+
+    text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a series below to browse its categories/files:\n\n"
+    buttons = []
+    
+    from config import OWNER_ID
+    is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+    
+    for s in series_list:
+        text += f"▪️ **{s['title']}**\n"
+        if s.get('description'):
+            text += f"   └ _{s['description']}_\n"
+            
+        is_series_unlocked = s.get("is_active", True) or is_user_premium
+        if is_series_unlocked:
+            buttons.append([InlineKeyboardButton(f"🎬 View {s['title'][:25]}", callback_data=f"cl_series_{s['id']}_0")])
+        else:
+            buttons.append([InlineKeyboardButton(f"🔒 View {s['title'][:25]} (Premium)", callback_data=f"cl_series_{s['id']}_0")])
+        
+    buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")])
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
 async def handle_payload(client: Client, message: Message, payload: str):
     user_id = message.from_user.id
     settings = await database.get_settings()
@@ -127,6 +158,9 @@ async def handle_payload(client: Client, message: Message, payload: str):
             return await message.reply_text("❌ Invalid Series Link.")
 
         await show_user_tree(client, message.chat.id, None, series_id, section_id=None, is_new_message=True)
+
+    elif payload == "availableseries":
+        await clone_available_series_handler(client, message)
 
     elif payload.startswith("premium_") or payload == "premium":
         from config import OWNER_ID
