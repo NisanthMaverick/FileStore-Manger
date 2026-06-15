@@ -303,7 +303,24 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if is_now_premium:
             await callback.answer("✅ Verification successful! You are now premium.", show_alert=True)
             if sec_id > 0:
-                await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id)
+                # If this section is a files-type, send files directly (not the tree which shows empty)
+                sec = await database.get_section(sec_id)
+                if sec and sec.get("sec_type") == "files":
+                    settings = await database.get_settings()
+                    db_channel = settings.get("db_channel_id")
+                    if not db_channel:
+                        return await callback.answer("Storage channel not configured.", show_alert=True)
+                    files, total_files = await database.list_files(skip=0, limit=500, series_id=series_id, section_id=sec_id)
+                    if not files:
+                        return await callback.answer("No files in this section yet.", show_alert=True)
+                    await callback.answer(f"⏳ Sending {total_files} file(s)...")
+                    file_msg_ids = [f["message_id"] for f in files]
+                    sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, file_msg_ids)
+                    if sent_msg_ids:
+                        await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
+                    return
+                else:
+                    await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id)
             else:
                 await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
         else:
