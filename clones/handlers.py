@@ -132,28 +132,12 @@ async def handle_payload(client: Client, message: Message, payload: str):
         from config import OWNER_ID
         is_premium = await database.is_premium_user(user_id, OWNER_ID)
         if is_premium:
-            channels = await database.get_remote_channels()
-            if channels:
-                chan_text = "\n".join([f"🔹 [{c['title']}]({c['invite_link']})" for c in channels])
-                msg_text = (
-                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
-                    "Your premium subscription is active. You now have full access to this bot.\n\n"
-                    "📺 **Join our Premium Channels:**\n"
-                    f"{chan_text}\n\n"
-                    "🚀 Use /explorefiles or browse series below to start downloading!"
-                )
-                buttons = []
-                for c in channels:
-                    buttons.append([InlineKeyboardButton(f"📺 Join {c['title']}", url=c['invite_link'])])
-                buttons.append([InlineKeyboardButton("🎬 Browse Files", callback_data="cl_browse_series_0")])
-                markup = InlineKeyboardMarkup(buttons)
-            else:
-                msg_text = (
-                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
-                    "Your premium subscription is active. You now have full access to this bot.\n\n"
-                    "🚀 Use /explorefiles or browse series below to start downloading!"
-                )
-                markup = InlineKeyboardMarkup([[InlineKeyboardButton("🎬 Browse Files", callback_data="cl_browse_series_0")]])
+            msg_text = (
+                "🎉 **Premium VIP Access Activated!** 🎉\n\n"
+                "Your premium subscription is active. You now have full access to this bot.\n\n"
+                "🚀 Use /explorefiles or browse series below to start downloading!"
+            )
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🎬 Browse Files", callback_data="cl_browse_series_0")]])
             await message.reply_text(msg_text, reply_markup=markup, disable_web_page_preview=True)
         else:
             await message.reply_text(

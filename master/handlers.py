@@ -22,28 +22,12 @@ async def start_handler(client: Client, message: Message):
     if payload.startswith("premium_") or payload == "premium":
         is_premium = await database.is_premium_user(user_id, OWNER_ID)
         if is_premium:
-            channels = await database.get_remote_channels()
-            if channels:
-                chan_text = "\n".join([f"🔹 [{c['title']}]({c['invite_link']})" for c in channels])
-                msg_text = (
-                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
-                    "Your premium subscription is active. You now have full access to this bot.\n\n"
-                    "📺 **Join our Premium Channels:**\n"
-                    f"{chan_text}\n\n"
-                    "🚀 Use /explorefiles or search for files directly to start downloading!"
-                )
-                buttons = []
-                for c in channels:
-                    buttons.append([InlineKeyboardButton(f"📺 Join {c['title']}", url=c['invite_link'])])
-                markup = InlineKeyboardMarkup(buttons)
-            else:
-                msg_text = (
-                    "🎉 **Premium VIP Access Activated!** 🎉\n\n"
-                    "Your premium subscription is active. You now have full access to this bot.\n\n"
-                    "🚀 Use /explorefiles or search for files directly to start downloading!"
-                )
-                markup = None
-            await message.reply_text(msg_text, reply_markup=markup, disable_web_page_preview=True)
+            msg_text = (
+                "🎉 **Premium VIP Access Activated!** 🎉\n\n"
+                "Your premium subscription is active. You now have full access to this bot.\n\n"
+                "🚀 Use /explorefiles or search for files directly to start downloading!"
+            )
+            await message.reply_text(msg_text, disable_web_page_preview=True)
             return
         else:
             await message.reply_text(
