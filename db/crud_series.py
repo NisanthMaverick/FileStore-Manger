@@ -99,7 +99,9 @@ def _get_series_sync(series_id: int):
                 "custom_msg": s.custom_msg,
                 "buttons_per_row": s.buttons_per_row,
                 "display_order": s.display_order,
-                "custom_pic": s.custom_pic
+                "custom_pic": s.custom_pic,
+                "is_active": s.is_active,
+                "created_at": s.created_at
             }
         return None
 
@@ -113,7 +115,9 @@ def _list_series_sync():
             "custom_msg": s.custom_msg,
             "buttons_per_row": s.buttons_per_row,
             "display_order": s.display_order,
-            "custom_pic": s.custom_pic
+            "custom_pic": s.custom_pic,
+            "is_active": s.is_active,
+            "created_at": s.created_at
         } for s in series_list]
 
 def _delete_series_sync(series_id: int):
@@ -145,7 +149,8 @@ def _get_section_sync(section_id: int):
                 "sec_type": sec.sec_type,
                 "custom_msg": sec.custom_msg,
                 "buttons_per_row": sec.buttons_per_row,
-                "custom_pic": sec.custom_pic
+                "custom_pic": sec.custom_pic,
+                "created_at": sec.created_at
             }
         return None
 
@@ -165,7 +170,8 @@ def _list_sections_sync(series_id: int, parent_id: int = None):
             "sec_type": s.sec_type,
             "custom_msg": s.custom_msg,
             "buttons_per_row": s.buttons_per_row,
-            "custom_pic": s.custom_pic
+            "custom_pic": s.custom_pic,
+            "created_at": s.created_at
         } for s in sections]
 
 def _delete_section_sync(section_id: int) -> bool:
@@ -203,7 +209,7 @@ def _clear_section_files_sync(section_id: int):
         session.query(FileRecord).filter(FileRecord.section_id == section_id).delete()
         session.commit()
 
-def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None) -> bool:
+def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None) -> bool:
     with SessionLocal() as session:
         s = session.query(Series).filter(Series.id == series_id).first()
         if s:
@@ -219,6 +225,8 @@ def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_ro
                 s.display_order = display_order
             if custom_pic is not None:
                 s.custom_pic = None if custom_pic == "none" else custom_pic
+            if is_active is not None:
+                s.is_active = is_active
             session.commit()
             return True
         return False
@@ -271,8 +279,8 @@ async def update_section(section_id: int, name: str) -> bool:
 async def clear_section_files(section_id: int):
     await asyncio.to_thread(_clear_section_files_sync, section_id)
 
-async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None):
-    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order, custom_pic)
+async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None):
+    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order, custom_pic, is_active)
 
 async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None):
     return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row, custom_pic)

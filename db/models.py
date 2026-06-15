@@ -30,6 +30,9 @@ class Settings(Base):
     user_send_delay = Column(Integer, default=3)
     db_upload_delay = Column(Integer, default=3)
     access_to_all = Column(Boolean, default=True)
+    lock_buttons_enabled = Column(Boolean, default=False)
+    protect_content_enabled = Column(Boolean, default=False)
+    lock_time_window = Column(Integer, default=0)
 
 class CloneBot(Base):
     __tablename__ = "clone_bots"
@@ -47,6 +50,8 @@ class Series(Base):
     buttons_per_row = Column(Integer, default=2)
     display_order = Column(Integer, default=0)
     custom_pic = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class SeriesSection(Base):
     __tablename__ = "series_sections"
@@ -58,6 +63,7 @@ class SeriesSection(Base):
     custom_msg = Column(Text, nullable=True)
     buttons_per_row = Column(Integer, default=2)
     custom_pic = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class FileRecord(Base):
     __tablename__ = "files"
@@ -120,6 +126,10 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series_sections ADD COLUMN custom_pic VARCHAR DEFAULT NULL"))
             conn.commit()
+    if "created_at" not in columns_sec:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series_sections ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+            conn.commit()
 
     # settings columns check
     columns_sett = [c["name"] for c in inspector.get_columns("settings")]
@@ -163,6 +173,18 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN access_to_all BOOLEAN DEFAULT TRUE"))
             conn.commit()
+    if "lock_buttons_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN lock_buttons_enabled BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "protect_content_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN protect_content_enabled BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "lock_time_window" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN lock_time_window INTEGER DEFAULT 0"))
+            conn.commit()
 
     # series columns check
     columns_ser = [c["name"] for c in inspector.get_columns("series")]
@@ -181,6 +203,14 @@ def db_init():
     if "custom_pic" not in columns_ser:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series ADD COLUMN custom_pic VARCHAR DEFAULT NULL"))
+            conn.commit()
+    if "is_active" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
+            conn.commit()
+    if "created_at" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
             conn.commit()
 
     # Auto-migrate: any section that owns file records must be sec_type='files'

@@ -232,4 +232,12 @@ async def handle_config_callbacks(client: Client, callback: CallbackQuery, data:
         await show_start_end_msg_menu(client, callback.message.chat.id, callback.message.id)
         return True
 
+    elif data == "toggle_protect_content":
+        settings = await database.get_settings()
+        new_status = not settings.get("protect_content_enabled", False)
+        await database.update_settings({"protect_content_enabled": new_status})
+        await callback.answer(f"Forward restriction toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_bot_config(client, callback.message.chat.id, callback.message.id)
+        return True
+
     return False

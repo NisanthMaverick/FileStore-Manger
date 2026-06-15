@@ -11,7 +11,7 @@ from .helpers import (
 from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
     get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr,
-    show_remove_subscriber_menu
+    show_remove_subscriber_menu, show_lock_settings, show_active_series_config
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -219,6 +219,9 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
                 InlineKeyboardButton("🤖 Deploy Clone Bots", callback_data="manage_clones")
             ],
             [
+                InlineKeyboardButton("🔒 Lock Button Settings", callback_data="lock_settings")
+            ],
+            [
                 InlineKeyboardButton("🔙 Back Panel", callback_data="main_panel")
             ]
         ])
@@ -344,6 +347,58 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
             await log_admin_action(f"🛡️ **Clone Bot Deleted**: @{username} by {callback.from_user.mention}")
             
         await show_manage_clones(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "lock_settings":
+        await callback.answer()
+        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "edit_unlock_duration":
+        await callback.answer()
+        settings = await database.get_settings()
+        current_window = settings.get("lock_time_window", 0)
+        ADMIN_STATES[user_id] = {"state": "waiting_for_unlock_duration", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "⏱ **Edit Unlock Duration**\n\n"
+            "Specify the period during which new content remains unlocked for non-premium users.\n"
+            "Format: number followed by `h` (hours) or `d` (days).\n"
+            "Examples: `12h` (12 hours), `1d` (24 hours), `3d` (72 hours).\n\n"
+            f"Current Unlock Duration: `{current_window} hour(s)`\n"
+            "Type `0`, `no`, or `disable` to only keep the latest item unlocked.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="lock_settings")]])
+        )
+        return True
+
+    elif data == "toggle_lock_buttons":
+        settings = await database.get_settings()
+        new_status = not settings.get("lock_buttons_enabled", False)
+        await database.update_settings({"lock_buttons_enabled": new_status})
+        await callback.answer(f"Lock Buttons toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data.startswith("config_active_series_"):
+        await callback.answer()
+        skip = int(data.split("_")[3])
+        await show_active_series_config(client, callback.message.chat.id, callback.message.id, skip)
+        return True
+
+    elif data.startswith("toggle_series_active_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        skip = int(parts[4])
+        
+        series = await database.get_series(series_id)
+        if series:
+            new_status = not series.get("is_active", True)
+            await database.update_series_settings(series_id, is_active=new_status)
+            await callback.answer(f"Toggled {series['title']} active status to: {'Active' if new_status else 'Inactive'}")
+        else:
+            await callback.answer("Series not found.", show_alert=True)
+            
+        await show_active_series_config(client, callback.message.chat.id, callback.message.id, skip)
         return True
 
     return False

@@ -10,7 +10,7 @@ from .helpers import (
     ADMIN_STATES, log_admin_action, get_back_button
 )
 from .ui_config import show_auto_delete_menu
-from .ui_admin import show_db_sync, show_mgr_admins
+from .ui_admin import show_db_sync, show_mgr_admins, show_lock_settings
 
 async def handle_admin_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
@@ -142,6 +142,47 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             await show_mgr_admins(client, message.chat.id, message_id)
         else:
             await message.reply_text(f"✅ Removed {admin_id} from admins list.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="mgr_admins")]]))
+        return True
+
+    # 5.5 Waiting for Lock Unlock Duration Window
+    elif state == "waiting_for_unlock_duration":
+        val = message.text.strip().lower()
+        if val in ["0", "no", "disable", "none"]:
+            hours = 0
+        else:
+            import re
+            match = re.match(r"^(\d+)\s*(h|d)?$", val)
+            if not match:
+                return await message.reply_text(
+                    "⚠️ Invalid duration format. Please enter a number followed by `h` (hours) or `d` (days).\n"
+                    "Examples: `12h`, `2d`, or type `0` to disable duration lock."
+                )
+            num = int(match.group(1))
+            unit = match.group(2) or "h"
+            if unit == "d":
+                hours = num * 24
+            else:
+                hours = num
+                
+        await database.update_settings({"lock_time_window": hours})
+        ADMIN_STATES.pop(user_id, None)
+        
+        if hours == 0:
+            feedback_str = "Unlock duration disabled (only the latest content stays unlocked)."
+        elif hours % 24 == 0:
+            feedback_str = f"Unlock duration set to {hours // 24} day(s)."
+        else:
+            feedback_str = f"Unlock duration set to {hours} hour(s)."
+            
+        await log_admin_action(f"🔒 **Lock Duration Updated**: `{feedback_str}` by {message.from_user.mention}")
+        
+        if message_id:
+            try:
+                await show_lock_settings(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(f"✅ {feedback_str}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="lock_settings")]]))
+        else:
+            await message.reply_text(f"✅ {feedback_str}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="lock_settings")]]))
         return True
 
     # 6. Waiting for File Auto Delete Duration

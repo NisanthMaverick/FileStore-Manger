@@ -86,10 +86,41 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     buttons = []
 
     if sections:
+        settings = await database.get_settings()
+        from config import OWNER_ID
+        is_premium = False
+        if await database.is_admin(chat_id, OWNER_ID) or await database.is_subscriber(chat_id):
+            is_premium = True
+
+        lock_enabled = settings.get("lock_buttons_enabled", False)
+        window = settings.get("lock_time_window", 0)
+        latest_file_sec_id = None
+        
+        if lock_enabled and not is_premium and window == 0:
+            file_sections = [sec for sec in sections if sec.get("sec_type") == "files"]
+            if file_sections:
+                latest_file_sec_id = max(sec["id"] for sec in file_sections)
+
         row = []
         for s in sections:
             if s.get("sec_type") == "files":
-                btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
+                is_unlocked = True
+                if lock_enabled and not is_premium:
+                    if window > 0:
+                        created_at = s.get("created_at")
+                        if created_at:
+                            from datetime import datetime
+                            age_hours = (datetime.utcnow() - created_at).total_seconds() / 3600.0
+                            if age_hours >= window:
+                                is_unlocked = False
+                    else:
+                        if s["id"] != latest_file_sec_id:
+                            is_unlocked = False
+
+                if is_unlocked:
+                    btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
+                else:
+                    btn = InlineKeyboardButton(f"🔒 {s['name']}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
             else:
                 btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"cl_tree_{series_id}_{s['id']}")
             

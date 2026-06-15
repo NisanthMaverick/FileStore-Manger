@@ -214,3 +214,83 @@ async def show_remove_subscriber_menu(client: Client, chat_id: int, message_id: 
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
         print(f"Error rendering remove_subscriber_menu: {e}")
+
+async def show_lock_settings(client: Client, chat_id: int, message_id: int):
+    settings = await database.get_settings()
+    lock_status = "Enabled ✅" if settings.get("lock_buttons_enabled") else "Disabled ❌"
+    
+    window = settings.get("lock_time_window", 0)
+    if window == 0:
+        duration_str = "Disabled (Latest only) ❌"
+    elif window % 24 == 0:
+        days = window // 24
+        duration_str = f"{days} day(s) ✅"
+    else:
+        duration_str = f"{window} hour(s) ✅"
+        
+    text = (
+        "🔒 **Lock Buttons Settings**\n\n"
+        f"⚡ **Lock Buttons Status:** {lock_status}\n"
+        f"⏱ **Unlock Duration for New Uploads:** `{duration_str}`\n\n"
+        "If enabled:\n"
+        "• Non-premium users can only access content created within the unlock duration.\n"
+        "• If duration is disabled, only the **latest** episode/file in a folder is accessible.\n"
+        "• Older content will require premium subscription.\n\n"
+        "Configure active/inactive series for the library below:"
+    )
+    
+    toggle_btn_text = "🔴 Disable Lock Buttons" if settings.get("lock_buttons_enabled") else "🟢 Enable Lock Buttons"
+    
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(toggle_btn_text, callback_data="toggle_lock_buttons"),
+            InlineKeyboardButton("⏱ Edit Duration", callback_data="edit_unlock_duration")
+        ],
+        [
+            InlineKeyboardButton("📁 Configure Active Series", callback_data="config_active_series_0")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Admin Settings", callback_data="admin_settings")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering lock_settings: {e}")
+
+async def show_active_series_config(client: Client, chat_id: int, message_id: int, skip: int = 0):
+    series_list = await database.list_series()
+    limit = 5
+    
+    text = (
+        "🎬 **Configure Active Series**\n\n"
+        "Select active/inactive series. Non-active series are locked for non-premium users.\n\n"
+        "• ✅ = Active (open to everyone)\n"
+        "• ❌ = Inactive (restricted to premium/subscribers)\n\n"
+        "Click on any series below to toggle active status:"
+    )
+    
+    buttons = []
+    sliced_list = series_list[skip:skip+limit]
+    
+    for s in sliced_list:
+        status_emoji = "✅" if s.get("is_active", True) else "❌"
+        buttons.append([
+            InlineKeyboardButton(f"{status_emoji} {s['title']}", callback_data=f"toggle_series_active_{s['id']}_{skip}")
+        ])
+        
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"config_active_series_{max(0, skip - limit)}"))
+    if skip + limit < len(series_list):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"config_active_series_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([InlineKeyboardButton("🔙 Back to Lock Settings", callback_data="lock_settings")])
+    
+    markup = InlineKeyboardMarkup(buttons)
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering active_series_config: {e}")

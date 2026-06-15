@@ -27,7 +27,10 @@ def _get_settings_sync():
             "series_library_custom_msg": settings.series_library_custom_msg,
             "user_send_delay": settings.user_send_delay,
             "db_upload_delay": settings.db_upload_delay,
-            "access_to_all": settings.access_to_all
+            "access_to_all": settings.access_to_all,
+            "lock_buttons_enabled": settings.lock_buttons_enabled,
+            "protect_content_enabled": settings.protect_content_enabled,
+            "lock_time_window": settings.lock_time_window
         }
 
 def _update_settings_sync(updates: dict):

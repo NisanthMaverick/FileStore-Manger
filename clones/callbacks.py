@@ -4,13 +4,17 @@ import database
 from .helpers import (
     check_user_subscribed, get_clone_welcome_markup,
     handle_auto_delete_if_enabled, log_download_action,
-    copy_messages_with_start_end, check_clone_access, handle_clone_callback_access_denied
+    copy_messages_with_start_end, check_clone_access, handle_clone_callback_access_denied,
+    SENDING_USERS
 )
 from .tree import show_user_tree
 from .handlers import handle_payload
+from config import OWNER_ID
 
 async def clone_callback_handler(client: Client, callback: CallbackQuery):
     user_id = callback.from_user.id
+    if user_id in SENDING_USERS:
+        return await callback.answer("⚠️ Your series is sending. Once complete all files, try a new file.", show_alert=True)
     if not await check_clone_access(user_id):
         await handle_clone_callback_access_denied(client, callback)
         return
@@ -34,6 +38,35 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
     elif data.startswith("cl_series_"):
         series_id = int(data.split("_")[2])
+        series = await database.get_series(series_id)
+        if series and not series.get("is_active", True):
+            is_user_premium = False
+            if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
+                is_user_premium = True
+            
+            if not is_user_premium:
+                await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
+                owner_username = None
+                try:
+                    owner_user = await client.get_users(OWNER_ID)
+                    if owner_user and owner_user.username:
+                        owner_username = owner_user.username
+                except Exception:
+                    pass
+                contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+                
+                text = (
+                    "🔒 **Premium Access Required**\n\n"
+                    "You are not a premium user to see old series/content.\n"
+                    "If you want old series, please contact the administrator."
+                )
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)],
+                    [InlineKeyboardButton("🔙 Back to Series Library", callback_data="cl_browse_series_0")]
+                ])
+                await callback.message.edit_text(text, reply_markup=markup)
+                return
+
         await callback.answer()
         await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
 
@@ -104,6 +137,39 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if not db_channel:
             return await callback.answer("Storage channel not configured by admin.", show_alert=True)
 
+        if settings.get("lock_buttons_enabled"):
+            is_user_premium = False
+            if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
+                is_user_premium = True
+            
+            if not is_user_premium:
+                # Check if parent series is active. If inactive, it's locked.
+                parent_series_active = True
+                if file_info.get("series_id"):
+                    series = await database.get_series(file_info["series_id"])
+                    if series and not series.get("is_active", True):
+                        parent_series_active = False
+                
+                if not parent_series_active:
+                    return await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
+
+                window = settings.get("lock_time_window", 0)
+                is_within_window = False
+                if file_info.get("section_id"):
+                    sec = await database.get_section(file_info["section_id"])
+                    if sec and window > 0 and sec.get("created_at"):
+                        from datetime import datetime
+                        age_hours = (datetime.utcnow() - sec["created_at"]).total_seconds() / 3600.0
+                        if age_hours < window:
+                            is_within_window = True
+                
+                if not is_within_window:
+                    files, total = await database.list_files(skip=0, limit=1000, series_id=file_info.get("series_id"), section_id=file_info.get("section_id"))
+                    if files:
+                        latest_file = max(files, key=lambda f: f["message_id"])
+                        if file_info["file_code"] != latest_file["file_code"]:
+                            return await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
+
         await callback.answer("Delivering episode...")
         try:
             sent_msg_ids = await copy_messages_with_start_end(client, user_id, db_channel, [file_info["message_id"]])
@@ -135,13 +201,21 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             
         buttons = []
         
+        is_user_premium = False
+        if await database.is_admin(user_id, OWNER_ID) or await database.is_subscriber(user_id):
+            is_user_premium = True
+
         sliced_list = series_list[skip:skip+limit]
         if not sliced_list:
             text += "_No series available._"
         else:
             for s in sliced_list:
                 text += f"▪️ **{s['title']}**\n"
-                buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
+                is_series_unlocked = s.get("is_active", True) or is_user_premium
+                if is_series_unlocked:
+                    buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
+                else:
+                    buttons.append([InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
         
         pag_row = []
         if skip > 0:
@@ -174,3 +248,6 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         full_markup.append([InlineKeyboardButton("🎬 Browse Series / Categories", callback_data="cl_browse_series_0")])
         
         await callback.message.edit_text(welcome_text, reply_markup=InlineKeyboardMarkup(full_markup))
+
+    elif data.startswith("cl_locked_sec_"):
+        await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
