@@ -74,7 +74,7 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
             )
             markup = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                    InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
                     InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
                 ],
                 [

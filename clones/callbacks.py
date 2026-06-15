@@ -60,7 +60,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 )
                 markup = InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                        InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
                         InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
                     ],
                     [
@@ -277,7 +277,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         )
         markup = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot"),
+                InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
                 InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
             ],
             [
