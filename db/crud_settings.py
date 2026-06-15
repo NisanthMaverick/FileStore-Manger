@@ -241,8 +241,6 @@ def clear_user_premium_mem_cache(user_id: int = None):
         USER_PREMIUM_MEMORY_CACHE.clear()
 
 def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
-    global USER_PREMIUM_MEMORY_CACHE
-    
     # 1. Bot owner is always premium
     if user_id == owner_id:
         return True
@@ -258,40 +256,8 @@ def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
         if sub:
             return True
 
-        # 4. Check in-memory cache first to avoid DB query overhead
-        now_ts = time.time()
-        if user_id in USER_PREMIUM_MEMORY_CACHE:
-            is_prem, exp_ts = USER_PREMIUM_MEMORY_CACHE[user_id]
-            if now_ts < exp_ts:
-                return is_prem
-
-        # 5. Check if testing_mode is enabled. If enabled, we treat cached remote premium users as normal (return False)
-        settings = session.query(Settings).first()
-        if settings and settings.testing_mode:
-            USER_PREMIUM_MEMORY_CACHE[user_id] = (False, now_ts + 60.0) # cache negative result for 60s
-            return False
-
-        # 6. Check local DB cache
-        cache_rec = session.query(RemotePremiumCache).filter(RemotePremiumCache.user_id == user_id).first()
-        if cache_rec and cache_rec.expiry_date:
-            try:
-                expiry = datetime.strptime(cache_rec.expiry_date, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
-                if expiry >= datetime.now():
-                    USER_PREMIUM_MEMORY_CACHE[user_id] = (True, now_ts + 300.0) # cache for 5 minutes
-                    return True
-            except Exception:
-                pass
-
-        # 7. Auto-Identify: User is not active in local cache. Check remote DB dynamically.
-        # If psycopg2 queries and finds a valid subscription, cache it locally.
-        is_remote_active = _sync_single_premium_user_sync(user_id)
-        if is_remote_active:
-            USER_PREMIUM_MEMORY_CACHE[user_id] = (True, now_ts + 300.0) # cache for 5 minutes
-            return True
-        else:
-            # Cache negative result for 120 seconds to prevent hammering the remote DB on every page click
-            USER_PREMIUM_MEMORY_CACHE[user_id] = (False, now_ts + 120.0)
-            return False
+    # 4. Check remote DB dynamically every time to ensure real-time status check
+    return _sync_single_premium_user_sync(user_id)
 
 
 def _sync_premium_users_sync() -> int:
