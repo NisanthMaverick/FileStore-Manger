@@ -1,3 +1,4 @@
+import asyncio
 from pyrogram import Client
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 import database
@@ -192,11 +193,15 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         skip = int(data.split("_")[3])
         await callback.answer()
         
-        settings = await database.get_settings()
+        # Parallel fetch: settings, series list, and premium check all at once
+        settings, series_list, is_user_premium = await asyncio.gather(
+            database.get_settings(),
+            database.list_series(),
+            database.is_premium_user(user_id, OWNER_ID)
+        )
+
         limit = settings.get("series_buttons_per_page", 5)
         library_msg = settings.get("series_library_custom_msg")
-        
-        series_list = await database.list_series()
         
         header = "🎬 **Browse Categories & Series**\n\nSelect a series to browse episodes:\n\n"
         if library_msg:
@@ -206,8 +211,6 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             
         buttons = []
         
-        is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
-
 
         sliced_list = series_list[skip:skip+limit]
         if not sliced_list:

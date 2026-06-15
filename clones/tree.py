@@ -40,7 +40,19 @@ async def stop_clone_bot(token: str):
             print(f"Failed to stop clone bot gracefully: {e}")
 
 async def show_user_tree(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, is_new_message: bool = False):
-    series = await database.get_series(series_id)
+    from config import OWNER_ID
+
+    async def _none():
+        return None
+
+    # --- Parallel fetch: series + sections + premium status + section info all at once ---
+    series, sections, is_user_premium, current_sec = await asyncio.gather(
+        database.get_series(series_id),
+        database.list_sections(series_id, parent_id=section_id),
+        database.is_premium_user(chat_id, OWNER_ID),
+        database.get_section(section_id) if section_id else _none()
+    )
+
     if not series:
         text = "❌ Series not found."
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")]])
@@ -54,9 +66,7 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         return
 
     # Check if series is inactive (premium lock) and user is not premium
-    from config import OWNER_ID
     if not series.get("is_active", True):
-        is_user_premium = await database.is_premium_user(chat_id, OWNER_ID)
         if not is_user_premium:
             owner_username = None
             try:
@@ -93,15 +103,11 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                     await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
             return
 
-
-    sections = await database.list_sections(series_id, parent_id=section_id)
-
     custom_msg = None
     custom_pic = None
     per_row = 2
 
     if section_id:
-        current_sec = await database.get_section(section_id)
         if current_sec:
             custom_msg = current_sec.get("custom_msg")
             custom_pic = current_sec.get("custom_pic")
@@ -127,10 +133,9 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     buttons = []
 
     if sections:
+        # settings already cached — this is a fast in-memory read after the first call
         settings = await database.get_settings()
-        from config import OWNER_ID
-        is_premium = await database.is_premium_user(chat_id, OWNER_ID)
-
+        is_premium = is_user_premium  # reuse parallel-fetched value
 
         lock_enabled = settings.get("lock_buttons_enabled", False)
         window = settings.get("lock_time_window", 0)

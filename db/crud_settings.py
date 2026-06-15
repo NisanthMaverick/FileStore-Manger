@@ -8,6 +8,9 @@ from config import SUBSCRIPTION_DATABASE_URL
 
 
 def _get_settings_sync():
+    global _SETTINGS_CACHE, _SETTINGS_CACHE_EXPIRY
+    if _SETTINGS_CACHE and time.time() < _SETTINGS_CACHE_EXPIRY:
+        return _SETTINGS_CACHE
     with SessionLocal() as session:
         settings = session.query(Settings).first()
         if not settings:
@@ -15,7 +18,7 @@ def _get_settings_sync():
             session.add(settings)
             session.commit()
             session.refresh(settings)
-        return {
+        result = {
             "welcome_msg": settings.welcome_msg,
             "fsub_channels": settings.fsub_channels,
             "fsub_enabled": settings.fsub_enabled,
@@ -38,6 +41,9 @@ def _get_settings_sync():
             "lock_time_window": settings.lock_time_window,
             "testing_mode": settings.testing_mode
         }
+    _SETTINGS_CACHE = result
+    _SETTINGS_CACHE_EXPIRY = time.time() + SETTINGS_CACHE_TTL
+    return result
 
 def _update_settings_sync(updates: dict):
     with SessionLocal() as session:
@@ -49,6 +55,7 @@ def _update_settings_sync(updates: dict):
             if hasattr(settings, key):
                 setattr(settings, key, value)
         session.commit()
+    clear_settings_cache()
 
 def _add_clone_bot_sync(token: str, username: str, name: str):
     with SessionLocal() as session:
@@ -232,6 +239,13 @@ async def list_subscribers(skip: int = 0, limit: int = 5):
 # Keys: user_id (int)
 # Values: (is_premium: bool, expiry_time: float)
 USER_PREMIUM_MEMORY_CACHE = {}
+# TTL in seconds — 5 minutes is fresh enough for most use cases
+USER_PREMIUM_CACHE_TTL = 300
+
+# In-memory settings cache to avoid repeated local DB reads on every navigation click
+_SETTINGS_CACHE = {}
+_SETTINGS_CACHE_EXPIRY = 0.0
+SETTINGS_CACHE_TTL = 120  # 2 minutes
 
 def clear_user_premium_mem_cache(user_id: int = None):
     global USER_PREMIUM_MEMORY_CACHE
@@ -240,24 +254,42 @@ def clear_user_premium_mem_cache(user_id: int = None):
     else:
         USER_PREMIUM_MEMORY_CACHE.clear()
 
+def clear_settings_cache():
+    global _SETTINGS_CACHE, _SETTINGS_CACHE_EXPIRY
+    _SETTINGS_CACHE = {}
+    _SETTINGS_CACHE_EXPIRY = 0.0
+
 def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
     # 1. Bot owner is always premium
     if user_id == owner_id:
         return True
 
-    # 2. Check if admin
+    # 2. Check in-memory cache first (fast path — avoids ALL DB calls on repeated navigation)
+    cached = USER_PREMIUM_MEMORY_CACHE.get(user_id)
+    if cached is not None:
+        is_premium, expiry = cached
+        if time.time() < expiry:
+            return is_premium
+        # Expired — remove from cache
+        USER_PREMIUM_MEMORY_CACHE.pop(user_id, None)
+
+    # 3. Check if admin
     with SessionLocal() as session:
         admin = session.query(Admin).filter(Admin.user_id == user_id).first()
         if admin:
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (True, time.time() + USER_PREMIUM_CACHE_TTL)
             return True
 
-        # 3. Check if local subscriber (manual premium subscriber)
+        # 4. Check if local subscriber (manual premium subscriber)
         sub = session.query(Subscriber).filter(Subscriber.user_id == user_id).first()
         if sub:
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (True, time.time() + USER_PREMIUM_CACHE_TTL)
             return True
 
-    # 4. Check remote DB dynamically every time to ensure real-time status check
-    return _sync_single_premium_user_sync(user_id)
+    # 5. Check remote Subscriptionbot DB and cache the result
+    result = _sync_single_premium_user_sync(user_id)
+    USER_PREMIUM_MEMORY_CACHE[user_id] = (result, time.time() + USER_PREMIUM_CACHE_TTL)
+    return result
 
 
 def _sync_premium_users_sync() -> int:
