@@ -71,14 +71,13 @@ async def master_available_series_handler(client: Client, message: Message):
         if not series_list:
             await message.reply_text("🎬 **No series available at the moment.**")
             return
-        text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a series to browse:\n\n"
-        buttons = []
+        text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nHere are the series currently available in the system:\n\n"
         for s in series_list:
             text += f"▪️ **{s['title']}**\n"
             if s.get('description'):
                 text += f"   └ _{s['description']}_\n"
-            buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"browse_sec_{s['id']}_0")])
-        buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="welcome_back")])
+            text += "\n"
+        buttons = [[InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="welcome_back")]]
         await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
     else:
         settings = await database.get_settings()

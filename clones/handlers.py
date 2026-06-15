@@ -82,24 +82,26 @@ async def clone_available_series_handler(client: Client, message: Message):
         await message.reply_text("🎬 **No series available at the moment.**\n\nCheck back later!")
         return
 
-    text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a series below to browse its categories/files:\n\n"
-    buttons = []
+    text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nHere are the series currently available in the bot:\n\n"
     
     from config import OWNER_ID
     is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
     
     for s in series_list:
-        text += f"▪️ **{s['title']}**\n"
+        is_series_unlocked = s.get("is_active", True) or is_user_premium
+        lock_emoji = "" if is_series_unlocked else "🔒 "
+        text += f"▪️ {lock_emoji}**{s['title']}**\n"
         if s.get('description'):
             text += f"   └ _{s['description']}_\n"
-            
-        is_series_unlocked = s.get("is_active", True) or is_user_premium
-        if is_series_unlocked:
-            buttons.append([InlineKeyboardButton(f"🎬 View {s['title'][:25]}", callback_data=f"cl_series_{s['id']}_0")])
-        else:
-            buttons.append([InlineKeyboardButton(f"🔒 View {s['title'][:25]} (Premium)", callback_data=f"cl_series_{s['id']}_0")])
+        text += "\n"
         
-    buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")])
+    text += "━━━━━━━━━━━━━━━━━━━━\n"
+    text += "💡 To browse and download files, click the **Explore Catalog** button below or use `/explorefiles`."
+    
+    buttons = [
+        [InlineKeyboardButton("🎬 Explore Catalog", callback_data="cl_browse_series_0")],
+        [InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")]
+    ]
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 async def handle_payload(client: Client, message: Message, payload: str):
