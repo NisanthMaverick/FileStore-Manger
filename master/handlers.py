@@ -11,6 +11,9 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name
     username = message.from_user.username
     
+    # Force sync user premium status with remote DB on start command (bypassing cache lags)
+    await database.sync_single_premium_user(user_id)
+    
     # Save user to DB
     is_new = await database.add_user(user_id, username, first_name)
     if is_new:
@@ -19,9 +22,12 @@ async def start_handler(client: Client, message: Message):
     # Extract payload if any
     payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
 
-    if payload.startswith("premium_") or payload == "premium":
-        is_premium = await database.is_premium_user(user_id, OWNER_ID)
-        if is_premium:
+    is_premium = await database.is_premium_user(user_id, OWNER_ID)
+    is_user_admin = await database.is_admin(user_id, OWNER_ID)
+
+    # If payload is empty or a premium activation payload, handle premium verification messages
+    if not payload or payload == "premium" or payload.startswith("premium_"):
+        if is_premium and not is_user_admin:
             msg_text = (
                 "🎉 **Premium VIP Access Activated!** 🎉\n\n"
                 "Your premium subscription is active. You now have full access to this bot.\n\n"
@@ -29,19 +35,19 @@ async def start_handler(client: Client, message: Message):
             )
             await message.reply_text(msg_text, disable_web_page_preview=True)
             return
-        else:
+        elif payload == "premium" or payload.startswith("premium_"):
             await message.reply_text(
                 "❌ **Premium Activation Failed**\n\n"
                 "We could not verify an active premium subscription for your account.\n"
                 "If you recently paid, please wait a moment for approval or contact admin."
             )
             return
-    elif payload == "availableseries":
+
+    if payload == "availableseries":
         await master_available_series_handler(client, message)
         return
 
     # Check if user is admin
-    is_user_admin = await database.is_admin(user_id, OWNER_ID)
     if not is_user_admin:
         settings = await database.get_settings()
         welcome_text = settings.get("welcome_msg") or "Hey {mention}, welcome to {bot_name}!"
@@ -56,6 +62,7 @@ async def start_handler(client: Client, message: Message):
         )
         markup = await get_welcome_markup()
         return await message.reply_text(welcome_text, reply_markup=markup)
+
 
     # Admin start flow
     await message.reply_text(

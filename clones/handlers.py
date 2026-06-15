@@ -10,9 +10,14 @@ from .tree import show_user_tree
 
 async def clone_start_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    
+    # Force sync user premium status with remote DB on start command (bypassing cache lags)
+    await database.sync_single_premium_user(user_id)
+    
     if not await check_clone_access(user_id):
         await send_clone_access_denied(client, message)
         return
+        
     first_name = message.from_user.first_name
     username = message.from_user.username
     bot_me = client.me
@@ -22,6 +27,27 @@ async def clone_start_handler(client: Client, message: Message):
         await log_new_user_start(client, message)
 
     payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
+
+    from config import OWNER_ID
+    is_premium = await database.is_premium_user(user_id, OWNER_ID)
+
+    # If payload is empty or a premium activation payload, handle premium verification messages
+    if not payload or payload == "premium" or payload.startswith("premium_"):
+        if is_premium:
+            msg_text = (
+                "🎉 **Premium VIP Access Activated!** 🎉\n\n"
+                "Your premium subscription is active. You now have full access to this bot.\n\n"
+                "🚀 Use /explorefiles or browse series below to start downloading!"
+            )
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🎬 Browse Files", callback_data="cl_browse_series_0")]])
+            return await message.reply_text(msg_text, reply_markup=markup, disable_web_page_preview=True)
+        else:
+            if payload == "premium" or payload.startswith("premium_"):
+                return await message.reply_text(
+                    "❌ **Premium Activation Failed**\n\n"
+                    "We could not verify an active premium subscription for your account.\n"
+                    "If you recently paid, please wait a moment for approval or contact admin."
+                )
 
     is_subbed, invite_buttons = await check_user_subscribed(client, user_id)
     if not is_subbed:
@@ -34,12 +60,13 @@ async def clone_start_handler(client: Client, message: Message):
         
         return await message.reply_text(
             f"Hey {message.from_user.mention} ʏᴏᴜ ɴᴇᴇᴅ ᴊᴏɪɴ Oᴜʀ ᴄʜᴀɴɴᴇʟ ɪɴ ᴏʀᴅᴇʀ ᴛᴏ ᴜsᴇ ᴍᴇ 😉\n\n"
-            "__Pʀᴇss ᴛʜᴇ Fᴏʟʟᴏᴡɪɴɢ Bᴜᴛᴛᴏɴ ᴛᴏ ᴊᴏɪɴ Nᴏᴡ 👇__",
+            "__Pʀᴇss ᴛʜᴇ FᴏʟʟᴏᴡɪɴGs Bᴜᴛᴛᴏɴ ᴛᴏ ᴊᴏɪɴ Nᴏᴡ 👇__",
             reply_markup=InlineKeyboardMarkup(buttons),
             quote=True
         )
 
     await handle_payload(client, message, payload)
+
 
 async def clone_id_handler(client: Client, message: Message):
     user_id = message.from_user.id
@@ -165,6 +192,7 @@ async def handle_payload(client: Client, message: Message, payload: str):
         await clone_available_series_handler(client, message)
 
     elif payload.startswith("premium_") or payload == "premium":
+        await database.sync_single_premium_user(user_id)
         from config import OWNER_ID
         is_premium = await database.is_premium_user(user_id, OWNER_ID)
         if is_premium:
@@ -181,3 +209,4 @@ async def handle_payload(client: Client, message: Message, payload: str):
                 "We could not verify an active premium subscription for your account.\n"
                 "If you recently paid, please wait a moment for approval or contact admin."
             )
+
