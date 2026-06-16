@@ -286,10 +286,27 @@ def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
             USER_PREMIUM_MEMORY_CACHE[user_id] = (True, time.time() + USER_PREMIUM_CACHE_TTL)
             return True
 
-    # 5. Check remote Subscriptionbot DB and cache the result
-    result = _sync_single_premium_user_sync(user_id)
-    USER_PREMIUM_MEMORY_CACHE[user_id] = (result, time.time() + USER_PREMIUM_CACHE_TTL)
-    return result
+    # 5. Check local remote_premium_cache table (fast local DB lookup)
+    with SessionLocal() as session:
+        settings = session.query(Settings).first()
+        if settings and settings.testing_mode:
+            USER_PREMIUM_MEMORY_CACHE[user_id] = (False, time.time() + USER_PREMIUM_CACHE_TTL)
+            return False
+
+        cache_rec = session.query(RemotePremiumCache).filter(RemotePremiumCache.user_id == user_id).first()
+        if cache_rec and cache_rec.expiry_date:
+            try:
+                expiry = datetime.strptime(cache_rec.expiry_date, "%d/%m/%Y").replace(hour=23, minute=59, second=59)
+                if expiry >= datetime.now():
+                    USER_PREMIUM_MEMORY_CACHE[user_id] = (True, time.time() + USER_PREMIUM_CACHE_TTL)
+                    return True
+            except Exception:
+                pass
+
+    # 6. If not cached, treat as normal user
+    USER_PREMIUM_MEMORY_CACHE[user_id] = (False, time.time() + USER_PREMIUM_CACHE_TTL)
+    return False
+
 
 
 def _sync_premium_users_sync() -> int:

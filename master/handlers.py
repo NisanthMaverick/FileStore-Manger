@@ -11,22 +11,24 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name
     username = message.from_user.username
     
-    # Force sync user premium status with remote DB on start command (bypassing cache lags)
-    await database.sync_single_premium_user(user_id)
+    # Extract payload if any
+    payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
+    is_premium_activation = (payload == "premium" or payload.startswith("premium_"))
     
+    # Force sync user premium status with remote DB ONLY on premium activation command
+    if is_premium_activation:
+        await database.sync_single_premium_user(user_id)
+        
     # Save user to DB
     is_new = await database.add_user(user_id, username, first_name)
     if is_new:
         await log_new_user_start(client, message)
-    
-    # Extract payload if any
-    payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
 
     is_premium = await database.is_premium_user(user_id, OWNER_ID)
     is_user_admin = await database.is_admin(user_id, OWNER_ID)
 
-    # If payload is empty or a premium activation payload, handle premium verification messages
-    if not payload or payload == "premium" or payload.startswith("premium_"):
+    # Handle premium activation success/failure messages only for premium activation payload
+    if is_premium_activation:
         if is_premium and not is_user_admin:
             msg_text = (
                 "🎉 **Premium VIP Access Activated!** 🎉\n\n"
@@ -35,13 +37,14 @@ async def start_handler(client: Client, message: Message):
             )
             await message.reply_text(msg_text, disable_web_page_preview=True)
             return
-        elif payload == "premium" or payload.startswith("premium_"):
+        else:
             await message.reply_text(
                 "❌ **Premium Activation Failed**\n\n"
                 "We could not verify an active premium subscription for your account.\n"
                 "If you recently paid, please wait a moment for approval or contact admin."
             )
             return
+
 
     if payload == "availableseries":
         await master_available_series_handler(client, message)

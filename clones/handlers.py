@@ -11,8 +11,12 @@ from .tree import show_user_tree
 async def clone_start_handler(client: Client, message: Message):
     user_id = message.from_user.id
     
-    # Force sync user premium status with remote DB on start command (bypassing cache lags)
-    await database.sync_single_premium_user(user_id)
+    payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
+    is_premium_activation = (payload == "premium" or payload.startswith("premium_"))
+    
+    # Force sync user premium status with remote DB ONLY on premium activation command
+    if is_premium_activation:
+        await database.sync_single_premium_user(user_id)
     
     if not await check_clone_access(user_id):
         await send_clone_access_denied(client, message)
@@ -26,13 +30,11 @@ async def clone_start_handler(client: Client, message: Message):
     if is_new:
         await log_new_user_start(client, message)
 
-    payload = message.text.split(" ", 1)[1] if len(message.text.split(" ", 1)) > 1 else ""
-
     from config import OWNER_ID
     is_premium = await database.is_premium_user(user_id, OWNER_ID)
 
-    # If payload is empty or a premium activation payload, handle premium verification messages
-    if not payload or payload == "premium" or payload.startswith("premium_"):
+    # Handle premium activation success/failure messages only for premium activation payload
+    if is_premium_activation:
         if is_premium:
             msg_text = (
                 "🎉 **Premium VIP Access Activated!** 🎉\n\n"
@@ -42,12 +44,12 @@ async def clone_start_handler(client: Client, message: Message):
             markup = InlineKeyboardMarkup([[InlineKeyboardButton("🎬 Browse Files", callback_data="cl_browse_series_0")]])
             return await message.reply_text(msg_text, reply_markup=markup, disable_web_page_preview=True)
         else:
-            if payload == "premium" or payload.startswith("premium_"):
-                return await message.reply_text(
-                    "❌ **Premium Activation Failed**\n\n"
-                    "We could not verify an active premium subscription for your account.\n"
-                    "If you recently paid, please wait a moment for approval or contact admin."
-                )
+            return await message.reply_text(
+                "❌ **Premium Activation Failed**\n\n"
+                "We could not verify an active premium subscription for your account.\n"
+                "If you recently paid, please wait a moment for approval or contact admin."
+            )
+
 
     is_subbed, invite_buttons = await check_user_subscribed(client, user_id)
     if not is_subbed:
