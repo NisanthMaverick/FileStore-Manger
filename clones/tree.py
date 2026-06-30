@@ -45,12 +45,13 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     async def _none():
         return None
 
-    # --- Parallel fetch: series + sections + premium status + section info all at once ---
-    series, sections, is_user_premium, current_sec = await asyncio.gather(
+    # --- Parallel fetch: series + sections + premium status + section info + settings all at once ---
+    series, sections, is_user_premium, current_sec, settings = await asyncio.gather(
         database.get_series(series_id),
         database.list_sections(series_id, parent_id=section_id),
         database.is_premium_user(chat_id, OWNER_ID),
-        database.get_section(section_id) if section_id else _none()
+        database.get_section(section_id) if section_id else _none(),
+        database.get_settings()
     )
 
     if not series:
@@ -66,8 +67,8 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         return
 
     # Check if series is inactive (premium lock) and user is not premium
-    if not series.get("is_active", True):
-        if not is_user_premium:
+    if settings.get("lock_buttons_enabled", False) and not series.get("is_active", True):
+        if settings.get("lock_old_series_enabled", True) and not is_user_premium:
             owner_username = None
             try:
                 owner_user = await client.get_users(OWNER_ID)
@@ -133,34 +134,40 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     buttons = []
 
     if sections:
-        # settings already cached — this is a fast in-memory read after the first call
-        settings = await database.get_settings()
         is_premium = is_user_premium  # reuse parallel-fetched value
 
         lock_enabled = settings.get("lock_buttons_enabled", False)
         window = settings.get("lock_time_window", 0)
         latest_file_sec_id = None
         
-        if lock_enabled and not is_premium and window == 0:
-            file_sections = [sec for sec in sections if sec.get("sec_type") == "files"]
-            if file_sections:
-                latest_file_sec_id = max(sec["id"] for sec in file_sections)
+        file_sections = [sec for sec in sections if sec.get("sec_type") == "files"]
+        if file_sections:
+            latest_file_sec_id = max(sec["id"] for sec in file_sections)
 
         row = []
         for s in sections:
             if s.get("sec_type") == "files":
                 is_unlocked = True
                 if lock_enabled and not is_premium:
-                    if window > 0:
-                        created_at = s.get("created_at")
-                        if created_at:
-                            from datetime import datetime
-                            age_hours = (datetime.utcnow() - created_at).total_seconds() / 3600.0
-                            if age_hours >= window:
-                                is_unlocked = False
-                    else:
-                        if s["id"] != latest_file_sec_id:
+                    parent_series_active = series.get("is_active", True)
+                    if not parent_series_active:
+                        if settings.get("lock_old_series_enabled", True):
                             is_unlocked = False
+                    else:
+                        if settings.get("lock_active_series_enabled", False):
+                            if settings.get("lock_day_based_enabled", False):
+                                created_at = s.get("created_at")
+                                is_within_window = False
+                                if created_at and window > 0:
+                                    from datetime import datetime
+                                    age_hours = (datetime.utcnow() - created_at).total_seconds() / 3600.0
+                                    if age_hours < window:
+                                        is_within_window = True
+                                if not is_within_window:
+                                    is_unlocked = False
+                            else:
+                                if s["id"] != latest_file_sec_id:
+                                    is_unlocked = False
 
                 if is_unlocked:
                     btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")

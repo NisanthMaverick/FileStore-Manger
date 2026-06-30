@@ -39,7 +39,12 @@ def _get_settings_sync():
             "lock_buttons_enabled": settings.lock_buttons_enabled,
             "protect_content_enabled": settings.protect_content_enabled,
             "lock_time_window": settings.lock_time_window,
-            "testing_mode": settings.testing_mode
+            "testing_mode": settings.testing_mode,
+            "lock_active_series_enabled": settings.lock_active_series_enabled,
+            "lock_old_series_enabled": settings.lock_old_series_enabled,
+            "lock_day_based_enabled": settings.lock_day_based_enabled,
+            "subscription_db_url": settings.subscription_db_url,
+            "more_info_msg": settings.more_info_msg
         }
     _SETTINGS_CACHE = result
     _SETTINGS_CACHE_EXPIRY = time.time() + SETTINGS_CACHE_TTL
@@ -309,25 +314,33 @@ def _is_premium_user_sync(user_id: int, owner_id: int) -> bool:
 
 
 
+def _get_subscription_db_url_sync() -> str:
+    with SessionLocal() as session:
+        sett = session.query(Settings).first()
+        if sett and sett.subscription_db_url:
+            return sett.subscription_db_url
+    return SUBSCRIPTION_DATABASE_URL
+
 def _sync_premium_users_sync() -> int:
     """
     Connects to the remote Subscriptionbot database, fetches all active plan 1/3 subscriptions,
     and bulk-replaces the local remote_premium_cache table.
     Returns the count of synced active subscriptions.
     """
-    if not SUBSCRIPTION_DATABASE_URL:
-        print("Error: SUBSCRIPTION_DATABASE_URL not configured.")
+    db_url = _get_subscription_db_url_sync()
+    if not db_url:
+        print("Error: Subscription Database URL not configured.")
         return 0
 
     conn = None
     try:
-        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        conn = psycopg2.connect(db_url, sslmode='require')
         with conn.cursor() as cursor:
-            # Query active subscriptions for plan ID 1
+            # Query active subscriptions for plan ID 1 or 3
             cursor.execute("""
                 SELECT user_id, plan_id, plan_name, expiry_date, status
                 FROM subscriptions
-                WHERE plan_id = 1 AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+                WHERE plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
             """)
             rows = cursor.fetchall()
             
@@ -373,17 +386,18 @@ def _sync_single_premium_user_sync(user_id: int) -> bool:
     and updates the local cache table.
     Returns True if user has an active premium subscription, False otherwise.
     """
-    if not SUBSCRIPTION_DATABASE_URL:
+    db_url = _get_subscription_db_url_sync()
+    if not db_url:
         return False
 
     conn = None
     try:
-        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        conn = psycopg2.connect(db_url, sslmode='require')
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT user_id, plan_id, plan_name, expiry_date, status
                 FROM subscriptions
-                WHERE user_id = %s AND plan_id = 1 AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
+                WHERE user_id = %s AND plan_id IN (1, 3) AND status IN ('Paid', 'Granted') AND expiry_date IS NOT NULL
                 ORDER BY sub_id DESC LIMIT 1
             """, (user_id,))
             r = cursor.fetchone()
@@ -424,6 +438,7 @@ def _sync_single_premium_user_sync(user_id: int) -> bool:
             conn.close()
 
 
+
 def _get_premium_cache_count_sync() -> int:
     with SessionLocal() as session:
         # Check active cached users (unexpired)
@@ -455,11 +470,12 @@ async def get_premium_cache_count() -> int:
 
 
 def _get_remote_channels_sync():
-    if not SUBSCRIPTION_DATABASE_URL:
+    db_url = _get_subscription_db_url_sync()
+    if not db_url:
         return []
     conn = None
     try:
-        conn = psycopg2.connect(SUBSCRIPTION_DATABASE_URL, sslmode='require')
+        conn = psycopg2.connect(db_url, sslmode='require')
         with conn.cursor() as cursor:
             cursor.execute("SELECT title, invite_link FROM premium_channels WHERE invite_link IS NOT NULL AND invite_link != ''")
             rows = cursor.fetchall()

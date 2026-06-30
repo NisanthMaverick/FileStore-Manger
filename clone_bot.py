@@ -4,7 +4,7 @@ from clones.helpers import (
     log_download_action, handle_auto_delete_if_enabled
 )
 from clones.tree import start_clone_bot, stop_clone_bot, show_user_tree
-from clones.handlers import clone_start_handler, clone_id_handler, clone_explore_handler, clone_available_series_handler
+from clones.handlers import clone_start_handler, clone_id_handler, clone_explore_handler, clone_available_series_handler, clone_info_handler
 from clones.callbacks import clone_callback_handler
 
 def register_clone_handlers(app: Client):
@@ -23,6 +23,10 @@ def register_clone_handlers(app: Client):
     @app.on_message(filters.command("availableseries") & filters.private)
     async def avail_series_cmd(client: Client, message):
         await clone_available_series_handler(client, message)
+
+    @app.on_message(filters.command("info") & filters.private)
+    async def info_cmd(client: Client, message):
+        await clone_info_handler(client, message)
 
     @app.on_callback_query()
     async def cb_query(client: Client, callback):

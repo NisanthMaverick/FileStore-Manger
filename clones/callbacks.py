@@ -146,35 +146,42 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         if settings.get("lock_buttons_enabled"):
             is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
-
             
             if not is_user_premium:
-                # Check if parent series is active. If inactive, it's locked.
                 parent_series_active = True
                 if file_info.get("series_id"):
                     series = await database.get_series(file_info["series_id"])
                     if series and not series.get("is_active", True):
                         parent_series_active = False
                 
+                is_locked = False
                 if not parent_series_active:
-                    return await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
-
-                window = settings.get("lock_time_window", 0)
-                is_within_window = False
-                if file_info.get("section_id"):
-                    sec = await database.get_section(file_info["section_id"])
-                    if sec and window > 0 and sec.get("created_at"):
-                        from datetime import datetime
-                        age_hours = (datetime.utcnow() - sec["created_at"]).total_seconds() / 3600.0
-                        if age_hours < window:
-                            is_within_window = True
-                
-                if not is_within_window:
-                    files, total = await database.list_files(skip=0, limit=1000, series_id=file_info.get("series_id"), section_id=file_info.get("section_id"))
-                    if files:
-                        latest_file = max(files, key=lambda f: f["message_id"])
-                        if file_info["file_code"] != latest_file["file_code"]:
-                            return await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
+                    if settings.get("lock_old_series_enabled", True):
+                        return await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
+                else:
+                    if settings.get("lock_active_series_enabled", False):
+                        if settings.get("lock_day_based_enabled", False):
+                            window = settings.get("lock_time_window", 0)
+                            is_within_window = False
+                            if file_info.get("section_id"):
+                                sec = await database.get_section(file_info["section_id"])
+                                if sec and window > 0 and sec.get("created_at"):
+                                    from datetime import datetime
+                                    age_hours = (datetime.utcnow() - sec["created_at"]).total_seconds() / 3600.0
+                                    if age_hours < window:
+                                        is_within_window = True
+                            
+                            if not is_within_window:
+                                is_locked = True
+                        else:
+                            files, total = await database.list_files(skip=0, limit=1000, series_id=file_info.get("series_id"), section_id=file_info.get("section_id"))
+                            if files:
+                                latest_file = max(files, key=lambda f: f["message_id"])
+                                if file_info["file_code"] != latest_file["file_code"]:
+                                    is_locked = True
+                                    
+                if is_locked:
+                    return await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
 
         await callback.answer("Delivering episode...")
         try:
@@ -253,8 +260,16 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if markup:
             full_markup = list(markup.inline_keyboard)
         full_markup.append([InlineKeyboardButton("🎬 Browse Series / Categories", callback_data="cl_browse_series_0")])
+        full_markup.append([InlineKeyboardButton("ℹ️ Info", callback_data="cl_user_more_info")])
         
         await callback.message.edit_text(welcome_text, reply_markup=InlineKeyboardMarkup(full_markup))
+
+    elif data == "cl_user_more_info":
+        await callback.answer()
+        settings = await database.get_settings()
+        info_text = await database.get_formatted_more_info_msg(settings)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")]])
+        await callback.message.edit_text(info_text, reply_markup=markup)
 
     elif data.startswith("cl_locked_sec_"):
         parts = data.split("_")

@@ -34,6 +34,13 @@ class Settings(Base):
     protect_content_enabled = Column(Boolean, default=False)
     lock_time_window = Column(Integer, default=0)
     testing_mode = Column(Boolean, default=False)
+    lock_active_series_enabled = Column(Boolean, default=False)
+    lock_old_series_enabled = Column(Boolean, default=True)
+    lock_day_based_enabled = Column(Boolean, default=False)
+    subscription_db_url = Column(Text, default=None)
+    more_info_msg = Column(Text, default=None)
+
+
 
 
 class CloneBot(Base):
@@ -200,6 +207,27 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN testing_mode BOOLEAN DEFAULT FALSE"))
             conn.commit()
+    if "lock_active_series_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN lock_active_series_enabled BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "lock_old_series_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN lock_old_series_enabled BOOLEAN DEFAULT TRUE"))
+            conn.commit()
+    if "lock_day_based_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN lock_day_based_enabled BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "subscription_db_url" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN subscription_db_url TEXT DEFAULT NULL"))
+            conn.commit()
+    if "more_info_msg" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN more_info_msg TEXT DEFAULT NULL"))
+            conn.commit()
+
 
 
     # series columns check

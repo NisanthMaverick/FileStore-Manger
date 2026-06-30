@@ -22,7 +22,24 @@ def _export_db_backup_sync() -> str:
             "db_channel_id": s.db_channel_id,
             "log_channel_id": s.log_channel_id,
             "auto_delete_enabled": s.auto_delete_enabled,
-            "auto_delete_duration": s.auto_delete_duration
+            "auto_delete_duration": s.auto_delete_duration,
+            "series_buttons_per_page": s.series_buttons_per_page,
+            "start_end_msg_enabled": s.start_end_msg_enabled,
+            "start_msg_db_id": s.start_msg_db_id,
+            "end_msg_db_id": s.end_msg_db_id,
+            "series_library_custom_msg": s.series_library_custom_msg,
+            "user_send_delay": s.user_send_delay,
+            "db_upload_delay": s.db_upload_delay,
+            "access_to_all": s.access_to_all,
+            "lock_buttons_enabled": s.lock_buttons_enabled,
+            "protect_content_enabled": s.protect_content_enabled,
+            "lock_time_window": s.lock_time_window,
+            "testing_mode": s.testing_mode,
+            "lock_active_series_enabled": s.lock_active_series_enabled,
+            "lock_old_series_enabled": s.lock_old_series_enabled,
+            "lock_day_based_enabled": s.lock_day_based_enabled,
+            "subscription_db_url": s.subscription_db_url,
+            "more_info_msg": s.more_info_msg
         } for s in settings_rows]
 
         # 2. Admins
@@ -54,7 +71,11 @@ def _export_db_backup_sync() -> str:
             "title": s.title,
             "description": s.description,
             "custom_msg": s.custom_msg,
-            "buttons_per_row": s.buttons_per_row
+            "buttons_per_row": s.buttons_per_row,
+            "display_order": s.display_order,
+            "custom_pic": s.custom_pic,
+            "is_active": s.is_active,
+            "created_at": s.created_at.isoformat() if s.created_at else None
         } for s in series_rows]
 
         # 6. SeriesSections
@@ -66,7 +87,9 @@ def _export_db_backup_sync() -> str:
             "parent_id": s.parent_id,
             "sec_type": s.sec_type,
             "custom_msg": s.custom_msg,
-            "buttons_per_row": s.buttons_per_row
+            "buttons_per_row": s.buttons_per_row,
+            "custom_pic": s.custom_pic,
+            "created_at": s.created_at.isoformat() if s.created_at else None
         } for s in sections_rows]
 
         # 7. FileRecords
@@ -111,7 +134,24 @@ def _import_db_backup_sync(json_str: str) -> bool:
                     db_channel_id=item.get("db_channel_id"),
                     log_channel_id=item.get("log_channel_id"),
                     auto_delete_enabled=item.get("auto_delete_enabled", False),
-                    auto_delete_duration=item.get("auto_delete_duration", 5)
+                    auto_delete_duration=item.get("auto_delete_duration", 5),
+                    series_buttons_per_page=item.get("series_buttons_per_page", 5),
+                    start_end_msg_enabled=item.get("start_end_msg_enabled", False),
+                    start_msg_db_id=item.get("start_msg_db_id"),
+                    end_msg_db_id=item.get("end_msg_db_id"),
+                    series_library_custom_msg=item.get("series_library_custom_msg"),
+                    user_send_delay=item.get("user_send_delay", 3),
+                    db_upload_delay=item.get("db_upload_delay", 3),
+                    access_to_all=item.get("access_to_all", True),
+                    lock_buttons_enabled=item.get("lock_buttons_enabled", False),
+                    protect_content_enabled=item.get("protect_content_enabled", False),
+                    lock_time_window=item.get("lock_time_window", 0),
+                    testing_mode=item.get("testing_mode", False),
+                    lock_active_series_enabled=item.get("lock_active_series_enabled", False),
+                    lock_old_series_enabled=item.get("lock_old_series_enabled", True),
+                    lock_day_based_enabled=item.get("lock_day_based_enabled", False),
+                    subscription_db_url=item.get("subscription_db_url"),
+                    more_info_msg=item.get("more_info_msg")
                 )
                 session.add(s)
 
@@ -142,19 +182,28 @@ def _import_db_backup_sync(json_str: str) -> bool:
                 )
                 session.add(cb)
 
-            # 5. Restore series
+             # 5. Restore series
             for item in data.get("series", []):
+                created_str = item.get("created_at")
+                created_at = datetime.fromisoformat(created_str) if created_str else datetime.utcnow()
                 s = Series(
                     id=item.get("id"),
                     title=item.get("title"),
                     description=item.get("description"),
                     custom_msg=item.get("custom_msg"),
-                    buttons_per_row=item.get("buttons_per_row", 2)
+                    buttons_per_row=item.get("buttons_per_row", 2),
+                    display_order=item.get("display_order", 0),
+                    custom_pic=item.get("custom_pic"),
+                    is_active=item.get("is_active", True),
+                    created_at=created_at
                 )
                 session.add(s)
+            session.flush()
 
             # 6. Restore series sections
             for item in data.get("series_sections", []):
+                created_str = item.get("created_at")
+                created_at = datetime.fromisoformat(created_str) if created_str else datetime.utcnow()
                 sec = SeriesSection(
                     id=item.get("id"),
                     name=item.get("name"),
@@ -162,9 +211,12 @@ def _import_db_backup_sync(json_str: str) -> bool:
                     parent_id=item.get("parent_id"),
                     sec_type=item.get("sec_type", "folder"),
                     custom_msg=item.get("custom_msg"),
-                    buttons_per_row=item.get("buttons_per_row", 2)
+                    buttons_per_row=item.get("buttons_per_row", 2),
+                    custom_pic=item.get("custom_pic"),
+                    created_at=created_at
                 )
                 session.add(sec)
+            session.flush()
 
             # 7. Restore file records
             for item in data.get("files", []):
@@ -180,12 +232,13 @@ def _import_db_backup_sync(json_str: str) -> bool:
                     section_id=item.get("section_id")
                 )
                 session.add(fr)
+            session.flush()
 
             session.commit()
             return True
         except Exception as e:
             session.rollback()
-            print(f"Error during backup import: {e}")
+            print(f"Error during backup import: {repr(e)}")
             raise e
 
 def _restart_database_sync() -> bool:

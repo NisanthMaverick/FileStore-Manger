@@ -379,8 +379,11 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         return True
 
     elif data == "edit_unlock_duration":
-        await callback.answer()
         settings = await database.get_settings()
+        if not settings.get("lock_active_series_enabled", False):
+            await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
+            return True
+        await callback.answer()
         current_window = settings.get("lock_time_window", 0)
         ADMIN_STATES[user_id] = {"state": "waiting_for_unlock_duration", "message_id": callback.message.id}
         await callback.message.edit_text(
@@ -423,6 +426,71 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
             await callback.answer("Series not found.", show_alert=True)
             
         await show_active_series_config(client, callback.message.chat.id, callback.message.id, skip)
+        return True
+
+    elif data == "toggle_lock_active":
+        settings = await database.get_settings()
+        new_status = not settings.get("lock_active_series_enabled", False)
+        await database.update_settings({"lock_active_series_enabled": new_status})
+        await callback.answer(f"Lock Active Series toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "toggle_lock_old":
+        settings = await database.get_settings()
+        new_status = not settings.get("lock_old_series_enabled", True)
+        await database.update_settings({"lock_old_series_enabled": new_status})
+        await callback.answer(f"Lock Old Series toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "toggle_lock_day_based":
+        settings = await database.get_settings()
+        if not settings.get("lock_active_series_enabled", False):
+            await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
+            return True
+        new_status = not settings.get("lock_day_based_enabled", False)
+        await database.update_settings({"lock_day_based_enabled": new_status})
+        await callback.answer(f"Day-Based Lock toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "config_subscription_db_url":
+        await callback.answer()
+        settings = await database.get_settings()
+        current_url = settings.get("subscription_db_url") or "Not configured (uses default)"
+        ADMIN_STATES[user_id] = {"state": "waiting_for_subscription_db_url", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "🔌 **Configure Premium Subscription Database Link**\n\n"
+            "Please send the PostgreSQL Database Connection URL for the Subscription bot.\n\n"
+            "Format: `postgresql://username:password@host:port/database?sslmode=require`\n\n"
+            f"Current URL: `{current_url}`\n\n"
+            "Type `none` or `default` to delete the custom URL and revert to default.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="premium_users_panel")]])
+        )
+        return True
+
+    elif data == "edit_more_info_msg":
+        await callback.answer()
+        settings = await database.get_settings()
+        current_msg = settings.get("more_info_msg") or "(Default Dynamic Message)"
+        ADMIN_STATES[user_id] = {"state": "waiting_for_more_info_msg", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "ℹ️ **Edit User Guidance / More Info Message**\n\n"
+            "Configure the template displayed to users when they click **Info / Guide** button.\n\n"
+            "You can use the following dynamic placeholders:\n"
+            "• `{active_premium_series_status}`: Active series lock status (ON/OFF)\n"
+            "• `{old_series_lock}`: Old series lock status (ON/OFF)\n"
+            "• `{day_based_lock_status}`: Day-based lock status (ON/OFF)\n"
+            "• `{unlock_duration}`: Active series unlock duration\n"
+            "• `{active_series_list}`: Dynamic bullet list of active series\n"
+            "• `{old_series_list}`: Dynamic bullet list of non-active series\n\n"
+            f"Current Message Template:\n```\n{current_msg}\n```\n\n"
+            "Type `none` or `default` to revert to using the default dynamic template.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="lock_settings")]])
+        )
         return True
 
     return False

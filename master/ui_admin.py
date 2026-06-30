@@ -164,22 +164,18 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
            f"🧪 **Testing Mode Status:** `{testing_mode_status}`\n\n" \
            f"Select an option below to manage subscribers and access permissions:"
            
-    toggle_text = "🔒 Restrict Access to Subs" if settings.get("access_to_all", True) else "🔓 Enable Access to All"
+    toggle_text = "🔒 Restrict Access" if settings.get("access_to_all", True) else "🔓 Enable Access"
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("➕ Subscribe User", callback_data="add_subscriber"),
             InlineKeyboardButton("🗑 Remove Subscriber", callback_data="remove_subscriber_menu_0")
         ],
         [
-            InlineKeyboardButton("💎 Premium Users Panel", callback_data="premium_users_panel")
-        ],
-        [
+            InlineKeyboardButton("💎 Premium Panel", callback_data="premium_users_panel"),
             InlineKeyboardButton(toggle_text, callback_data="toggle_access_to_all")
         ],
         [
-            InlineKeyboardButton("📢 Broadcast Message", callback_data="broadcast_subs")
-        ],
-        [
+            InlineKeyboardButton("📢 Broadcast Msg", callback_data="broadcast_subs"),
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")
         ]
     ])
@@ -193,20 +189,31 @@ async def show_premium_users_panel(client: Client, chat_id: int, message_id: int
     settings = await database.get_settings()
     testing_mode_status = "Enabled 🧪 (Premium access blocked)" if settings.get("testing_mode", False) else "Disabled ❌ (Premium access allowed)"
     
+    db_url = settings.get("subscription_db_url")
+    if db_url:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(db_url)
+            db_display = f"{parsed.scheme}://{parsed.hostname or 'unknown'}/{parsed.path.lstrip('/')}"
+        except Exception:
+            db_display = "Set (custom connection URL)"
+    else:
+        db_display = "Not set (using sibling bot .env default)"
+
     text = "💎 **Premium Users Control Panel**\n\n" \
            "This bot integrates with the Subscription Bot. Users with plan 1 or 3 are premium users.\n\n" \
            f"💎 **Total Active Cached Premium Users:** `{premium_count}`\n" \
+           f"🔌 **Dynamic Premium DB:** `{db_display}`\n" \
            f"🧪 **Testing Mode:** {testing_mode_status}\n\n" \
            "Select an option below:"
            
     markup = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🔄 Sync Premium Users", callback_data="sync_premium_users")
+            InlineKeyboardButton("🔄 Sync Premium", callback_data="sync_premium_users"),
+            InlineKeyboardButton("🧪 Toggle Testing", callback_data="toggle_testing_mode")
         ],
         [
-            InlineKeyboardButton("🧪 Toggle Testing Mode", callback_data="toggle_testing_mode")
-        ],
-        [
+            InlineKeyboardButton("🔌 Db Config", callback_data="config_subscription_db_url"),
             InlineKeyboardButton("🔙 Back", callback_data="sub_mgr")
         ]
     ])
@@ -253,39 +260,58 @@ async def show_remove_subscriber_menu(client: Client, chat_id: int, message_id: 
 async def show_lock_settings(client: Client, chat_id: int, message_id: int):
     settings = await database.get_settings()
     lock_status = "Enabled ✅" if settings.get("lock_buttons_enabled") else "Disabled ❌"
+    active_enabled = settings.get("lock_active_series_enabled", False)
+    active_status = "Enabled ✅" if active_enabled else "Disabled ❌"
+    old_status = "Enabled ✅" if settings.get("lock_old_series_enabled", True) else "Disabled ❌"
     
-    window = settings.get("lock_time_window", 0)
-    if window == 0:
-        duration_str = "Disabled (Latest only) ❌"
-    elif window % 24 == 0:
-        days = window // 24
-        duration_str = f"{days} day(s) ✅"
+    if active_enabled:
+        day_based_status = "Enabled ✅" if settings.get("lock_day_based_enabled", False) else "Disabled ❌"
+        window = settings.get("lock_time_window", 0)
+        if window == 0:
+            duration_str = "Disabled (Latest only) ❌"
+        elif window % 24 == 0:
+            days = window // 24
+            duration_str = f"{days} day(s) ✅"
+        else:
+            duration_str = f"{window} hour(s) ✅"
     else:
-        duration_str = f"{window} hour(s) ✅"
+        day_based_status = "Inactive (Requires Lock Active Series ON) ⚠️"
+        duration_str = "Inactive (Requires Lock Active Series ON) ⚠️"
         
     text = (
         "🔒 **Lock Buttons Settings**\n\n"
-        f"⚡ **Lock Buttons Status:** {lock_status}\n"
-        f"⏱ **Unlock Duration for New Uploads:** `{duration_str}`\n\n"
-        "If enabled:\n"
-        "• Non-premium users can only access content created within the unlock duration.\n"
-        "• If duration is disabled, only the **latest** episode/file in a folder is accessible.\n"
-        "• Older content will require premium subscription.\n\n"
-        "Configure active/inactive series for the library below:"
+        f"⚡ **Lock Buttons Master Switch:** {lock_status}\n"
+        f"🎬 **Lock Active Series:** {active_status}\n"
+        f"⏳ **Lock Old/Non-Active Series:** {old_status}\n"
+        f"⏱ **Day-Based Lock for Active Series:** {day_based_status}\n"
+        f"📅 **Active Series Unlock Duration:** `{duration_str}`\n\n"
+        "**Access Control Logic:**\n"
+        "• Master Switch must be enabled for any locks to apply.\n"
+        "• If Lock Active Series is enabled, files in active series are locked. If Day-Based Lock is ON, they unlock within the duration window; otherwise, only the latest section is unlocked.\n"
+        "• If Lock Old Series is enabled, all non-active series folders are restricted to premium."
     )
     
-    toggle_btn_text = "🔴 Disable Lock Buttons" if settings.get("lock_buttons_enabled") else "🟢 Enable Lock Buttons"
+    toggle_btn_text = "🔴 Disable Master Switch" if settings.get("lock_buttons_enabled") else "🟢 Enable Master Switch"
+    active_btn_text = "🎬 Lock Active: ON" if settings.get("lock_active_series_enabled", False) else "🎬 Lock Active: OFF"
+    old_btn_text = "⏳ Lock Old: ON" if settings.get("lock_old_series_enabled", True) else "⏳ Lock Old: OFF"
+    day_based_btn_text = "⏱ Day-Based: ON" if settings.get("lock_day_based_enabled", False) else "⏱ Day-Based: OFF"
     
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(toggle_btn_text, callback_data="toggle_lock_buttons"),
-            InlineKeyboardButton("⏱ Edit Duration", callback_data="edit_unlock_duration")
+            InlineKeyboardButton(old_btn_text, callback_data="toggle_lock_old")
         ],
         [
-            InlineKeyboardButton("📁 Configure Active Series", callback_data="config_active_series_0")
+            InlineKeyboardButton(active_btn_text, callback_data="toggle_lock_active"),
+            InlineKeyboardButton(day_based_btn_text, callback_data="toggle_lock_day_based")
         ],
         [
-            InlineKeyboardButton("🔙 Back to Admin Settings", callback_data="admin_settings")
+            InlineKeyboardButton("📅 Edit Duration", callback_data="edit_unlock_duration"),
+            InlineKeyboardButton("📁 Config Active List", callback_data="config_active_series_0")
+        ],
+        [
+            InlineKeyboardButton("ℹ️ Config Info Msg", callback_data="edit_more_info_msg"),
+            InlineKeyboardButton("🔙 Back Settings", callback_data="admin_settings")
         ]
     ])
     try:

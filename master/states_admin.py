@@ -500,4 +500,63 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Subscribers Mgr", callback_data="sub_mgr")]]))
         return True
 
+    elif state == "waiting_for_subscription_db_url":
+        url_input = message.text.strip()
+        ADMIN_STATES.pop(user_id, None)
+        
+        from .ui_admin import show_premium_users_panel
+        
+        if url_input.lower() in ("none", "default"):
+            await database.update_settings({"subscription_db_url": None})
+            text = "✅ **Custom Premium Database URL cleared!** Reverted to using sibling Bot .env defaults."
+        elif not url_input.startswith("postgresql://") and not url_input.startswith("postgres://"):
+            text = "❌ **Invalid Database Connection URL.** It must start with `postgresql://` or `postgres://`.\nReverted or no changes made."
+            if message_id:
+                try:
+                    await client.edit_message_text(
+                        chat_id=message.chat.id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Premium Panel", callback_data="premium_users_panel")]])
+                    )
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Premium Panel", callback_data="premium_users_panel")]]))
+            return True
+        else:
+            await database.update_settings({"subscription_db_url": url_input})
+            text = "✅ **Custom Premium Database URL configured and saved!**"
+
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_premium_users_panel(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Premium Panel", callback_data="premium_users_panel")]]))
+        return True
+
+    elif state == "waiting_for_more_info_msg":
+        msg_input = message.text.strip()
+        ADMIN_STATES.pop(user_id, None)
+        
+        if msg_input.lower() in ("none", "default"):
+            await database.update_settings({"more_info_msg": None})
+            text = "✅ **Guidance / Info message template reverted to default dynamic template!**"
+        else:
+            await database.update_settings({"more_info_msg": msg_input})
+            text = "✅ **Guidance / Info message template updated and saved successfully!**"
+
+        if message_id:
+            try:
+                await message.reply_text(text)
+                await show_lock_settings(client, message.chat.id, message_id)
+            except Exception:
+                await message.reply_text(text)
+        else:
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Lock Settings", callback_data="lock_settings")]]))
+        return True
+
     return False
