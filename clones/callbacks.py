@@ -257,9 +257,10 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         skip = int(data.split("_")[3])
         await callback.answer()
         
-        settings, journeys = await asyncio.gather(
+        settings, journeys, is_user_premium = await asyncio.gather(
             database.get_settings(),
-            database.list_journeys()
+            database.list_journeys(),
+            database.is_premium_user(user_id, OWNER_ID)
         )
 
         limit = settings.get("series_buttons_per_page", 5)
@@ -279,7 +280,11 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             row = []
             for j in sliced_list:
                 text += f"▪️ **{j['name']}**\n"
-                row.append(InlineKeyboardButton(f"🗺️ View {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
+                is_j_locked = j.get("is_locked", False) and not is_user_premium
+                if is_j_locked:
+                    row.append(InlineKeyboardButton(f"🔒 {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
+                else:
+                    row.append(InlineKeyboardButton(f"🗺️ View {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
                 if len(row) == 2:
                     buttons.append(row)
                     row = []
@@ -313,6 +318,36 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if not journey:
             return await callback.message.edit_text("❌ Category not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")]]))
             
+        if journey.get("is_locked", False) and not is_user_premium:
+            owner_username = None
+            try:
+                owner_user = await client.get_users(OWNER_ID)
+                if owner_user and owner_user.username:
+                    owner_username = owner_user.username
+            except Exception:
+                pass
+            contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+            
+            text = (
+                f"🔒 **Premium Access Required — {journey['name']}**\n\n"
+                "This category is restricted to premium users.\n"
+                "Please buy a subscription or contact the administrator if you have any issues."
+            )
+            markup = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
+                    InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+                ],
+                [
+                    InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_j_sub_{journey_id}")
+                ],
+                [
+                    InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")
+                ]
+            ])
+            await callback.message.edit_text(text, reply_markup=markup)
+            return
+
         limit = settings.get("series_buttons_per_page", 5)
         text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside {journey['name']} to browse series:\n\n"
         buttons = []
@@ -455,6 +490,55 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                     await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id)
             else:
                 await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
+        else:
+            await callback.answer("❌ No active premium subscription found for your ID (Plan 1 required).", show_alert=True)
+
+    elif data.startswith("cl_chk_j_sub_"):
+        journey_id = int(data.split("_")[4])
+        await callback.answer("🔄 Checking subscription status...", show_alert=False)
+        is_now_premium = await database.sync_single_premium_user(user_id)
+        if is_now_premium:
+            await callback.answer("✅ Verification successful! You are now premium.", show_alert=True)
+            journey, settings, series_list, is_user_premium = await asyncio.gather(
+                database.get_journey(journey_id),
+                database.get_settings(),
+                database.list_series(journey_id=journey_id),
+                database.is_premium_user(user_id, OWNER_ID)
+            )
+            if journey:
+                limit = settings.get("series_buttons_per_page", 5)
+                text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside {journey['name']} to browse series:\n\n"
+                buttons = []
+                sliced_list = series_list[0:limit]
+                if not sliced_list:
+                    text += "_No series available in this category._"
+                else:
+                    row = []
+                    for s in sliced_list:
+                        text += f"▪️ **{s['title']}**\n"
+                        is_series_unlocked = s.get("is_active", True) or is_user_premium
+                        if journey.get("is_locked", False):
+                            is_series_unlocked = is_user_premium
+                        elif journey["lock_buttons_enabled"] and journey["lock_individual_enabled"] and s.get("is_locked", False):
+                            is_series_unlocked = is_user_premium
+                            
+                        if is_series_unlocked:
+                            btn = InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                        else:
+                            btn = InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                        row.append(btn)
+                        if len(row) == 2:
+                            buttons.append(row)
+                            row = []
+                    if row:
+                        buttons.append(row)
+                pag_row = []
+                if limit < len(series_list):
+                    pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_journey_{journey_id}_{limit}"))
+                if pag_row:
+                    buttons.append(pag_row)
+                buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
+                await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         else:
             await callback.answer("❌ No active premium subscription found for your ID (Plan 1 required).", show_alert=True)
 
