@@ -44,12 +44,15 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
 
     custom_msg_status = custom_msg if custom_msg else "Default (Breadcrumbs / Description)"
     custom_pic_status = "Enabled ✅" if custom_pic else "Disabled ❌"
+    is_locked_val = series.get("is_locked", False) if is_root else current_sec.get("is_locked", False)
+    locked_status_str = "Enabled 🔒 (Premium Required)" if is_locked_val else "Disabled 🔓"
     
     text = (
         f"⚙️ **{type_str} Settings: {name}**\n\n"
         f"💬 **Custom Message:**\n`{custom_msg_status}`\n\n"
         f"🖼 **Custom Picture:** `{custom_pic_status}`\n\n"
         f"🔢 **Buttons per Row:** `{buttons_per_row}`\n\n"
+        f"🔒 **Individual Lock:** `{locked_status_str}`\n\n"
         "Configure folder settings or perform administrative actions below:"
     )
 
@@ -64,6 +67,9 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         [
             InlineKeyboardButton("✏️ Rename", callback_data=f"rename_series_opt_{series_id}_{library_skip}" if is_root else f"rename_sec_{series_id}_{section_id}_{library_skip}"),
             InlineKeyboardButton("🗑 Delete", callback_data=f"tree_del_series_{series_id}_{library_skip}" if is_root else f"tree_del_sec_{series_id}_{section_id}_{library_skip}")
+        ],
+        [
+            InlineKeyboardButton("🔓 Disable Individual Lock" if is_locked_val else "🔒 Enable Individual Lock", callback_data=f"toggle_indiv_lock_{series_id}_{section_id}_{library_skip}")
         ]
     ]
 
@@ -221,16 +227,103 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
                 print(f"Error sending text in show_series_browse: {e}")
 
 async def show_manage_series(client: Client, chat_id: int, message_id: int, skip: int = 0):
+    journeys = await database.list_journeys()
+    limit = 5
+    text = "🗺️ **Journeys & Categories Library**\n\nSelect a journey/category to manage its series and access controls:\n\n"
+    buttons = []
+    
+    sliced_list = journeys[skip:skip+limit]
+    if not sliced_list:
+        text += "_No journeys created yet._"
+    else:
+        for j in sliced_list:
+            text += f"▪️ **{j['name']}**\n"
+            buttons.append([
+                InlineKeyboardButton(f"🗺️ {j['name']}", callback_data=f"manage_journey_{j['id']}")
+            ])
+            
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"manage_series_skip_{max(0, skip - limit)}"))
+    if skip + limit < len(journeys):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"manage_series_skip_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([
+        InlineKeyboardButton("➕ Create Journey", callback_data="create_journey_opt")
+    ])
+    buttons.append(get_back_button("main_panel"))
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering show_manage_series (Journeys): {e}")
+
+async def show_journey_detail(client: Client, chat_id: int, message_id: int, journey_id: int):
+    journey = await database.get_journey(journey_id)
+    if not journey:
+        try:
+            await client.edit_message_text(chat_id=chat_id, message_id=message_id, text="❌ Journey not found.", reply_markup=InlineKeyboardMarkup([get_back_button("manage_series")]))
+        except Exception:
+            pass
+        return
+        
+    lock_status = "Enabled ✅" if journey["lock_buttons_enabled"] else "Disabled ❌"
+    active_lock = "Enabled ✅" if journey["lock_active_series_enabled"] else "Disabled ❌"
+    old_lock = "Enabled ✅" if journey["lock_old_series_enabled"] else "Disabled ❌"
+    indiv_lock = "Enabled ✅" if journey["lock_individual_enabled"] else "Disabled ❌"
+    db_channel = journey.get("db_channel_id")
+    db_status = f"`{db_channel}`" if db_channel else "_Default Settings Fallback_ ⚠️"
+    
+    text = (
+        f"🗺️ **Journey Details: {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🔒 **Access Control Summary:**\n"
+        f"• **Master Switch:** {lock_status}\n"
+        f"• **Lock Active Series:** {active_lock}\n"
+        f"• **Lock Old Series:** {old_lock}\n"
+        f"• **Individual Locks:** {indiv_lock}\n\n"
+        f"📁 **DB Channel Settings:**\n"
+        f"• **Channel ID:** {db_status}\n\n"
+        f"Select an administrative option below:"
+    )
+    
+    buttons = [
+        [
+            InlineKeyboardButton("🎬 View Series Library", callback_data=f"list_j_series_{journey_id}_0"),
+            InlineKeyboardButton("➕ Create Series", callback_data=f"create_series_j_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton("🔒 Access Lock Settings", callback_data=f"j_lock_settings_{journey_id}"),
+            InlineKeyboardButton("📁 Configure DB Channel", callback_data=f"config_j_db_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton("✏️ Rename Journey", callback_data=f"rename_journey_opt_{journey_id}"),
+            InlineKeyboardButton("🗑 Delete Journey", callback_data=f"delete_journey_opt_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Journeys", callback_data="manage_series")
+        ]
+    ]
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering show_journey_detail: {e}")
+
+async def show_manage_series_journey(client: Client, chat_id: int, message_id: int, journey_id: int, skip: int = 0):
+    journey = await database.get_journey(journey_id)
+    if not journey:
+        return await show_manage_series(client, chat_id, message_id)
+        
     settings = await database.get_settings()
     limit = settings.get("series_buttons_per_page", 5)
     
-    series_list = await database.list_series()
-    text = "🎬 **Video Series Library**\n\nSelect a series to browse:\n\n"
+    series_list = await database.list_series(journey_id=journey_id)
+    text = f"🎬 **Video Series Library — {journey['name']}**\n\nSelect a series to browse/configure:\n\n"
     buttons = []
     
     sliced_list = series_list[skip:skip+limit]
     if not sliced_list:
-        text += "_No series created yet or page is empty._"
+        text += "_No series created yet in this journey or page is empty._"
     else:
         for s in sliced_list:
             buttons.append([
@@ -239,22 +332,142 @@ async def show_manage_series(client: Client, chat_id: int, message_id: int, skip
             
     pag_row = []
     if skip > 0:
-        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"manage_series_skip_{max(0, skip - limit)}"))
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"list_j_series_{journey_id}_{max(0, skip - limit)}"))
     if skip + limit < len(series_list):
-        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"manage_series_skip_{skip + limit}"))
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"list_j_series_{journey_id}_{skip + limit}"))
     if pag_row:
         buttons.append(pag_row)
     
     buttons.append([
-        InlineKeyboardButton("⚙️ Series Management", callback_data="series_management_menu")
+        InlineKeyboardButton("⚙️ Series Management", callback_data=f"j_series_management_menu_{journey_id}")
     ])
-    buttons.append(get_back_button("manage_files"))
+    buttons.append([InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")])
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
-        print(f"Error rendering manage_series: {e}")
+        print(f"Error rendering show_manage_series_journey: {e}")
 
-async def show_series_management_menu(client: Client, chat_id: int, message_id: int):
+async def show_journey_lock_settings(client: Client, chat_id: int, message_id: int, journey_id: int):
+    journey = await database.get_journey(journey_id)
+    if not journey:
+        return await show_manage_series(client, chat_id, message_id)
+        
+    lock_status = "Enabled ✅" if journey["lock_buttons_enabled"] else "Disabled ❌"
+    active_enabled = journey["lock_active_series_enabled"]
+    active_status = "Enabled ✅" if active_enabled else "Disabled ❌"
+    old_status = "Enabled ✅" if journey["lock_old_series_enabled"] else "Disabled ❌"
+    indiv_status = "Enabled ✅" if journey["lock_individual_enabled"] else "Disabled ❌"
+    
+    is_locked_val = journey.get("is_locked", False)
+    j_lock_status_str = "Enabled 🔒 (Premium Required)" if is_locked_val else "Disabled 🔓"
+    
+    if active_enabled:
+        day_based_status = "Enabled ✅" if journey["lock_day_based_enabled"] else "Disabled ❌"
+        window = journey["lock_time_window"]
+        if window == 0:
+            duration_str = "Disabled (Latest only) ❌"
+        elif window % 24 == 0:
+            days = window // 24
+            duration_str = f"{days} day(s) ✅"
+        else:
+            duration_str = f"{window} hour(s) ✅"
+    else:
+        day_based_status = "Inactive (Requires Lock Active Series ON) ⚠️"
+        duration_str = "Inactive (Requires Lock Active Series ON) ⚠️"
+        
+    text = (
+        f"🔒 **Lock Settings — {journey['name']}**\n\n"
+        f"🔒 **Entire Journey Lock:** {j_lock_status_str}\n"
+        f"⚡ **Lock Buttons Master Switch:** {lock_status}\n"
+        f"🎬 **Lock Active Series:** {active_status}\n"
+        f"⏳ **Lock Old/Non-Active Series:** {old_status}\n"
+        f"⏱ **Day-Based Lock for Active Series:** {day_based_status}\n"
+        f"📅 **Active Series Unlock Duration:** `{duration_str}`\n"
+        f"🔓 **Individual Lock Switch:** {indiv_status}\n\n"
+        f"**Access Control Logic:**\n"
+        f"• If **Entire Journey Lock** is enabled, all contents under this Journey are completely restricted to premium users.\n"
+        f"• Master Switch must be enabled for other locks (Active, Old, Individual) to apply.\n"
+        f"• If Lock Active Series is enabled, files in active series are locked. If Day-Based Lock is ON, they unlock within the duration window; otherwise, only the latest section is unlocked.\n"
+        f"• If Lock Old Series is enabled, all non-active series folders are restricted to premium.\n"
+        f"• If Individual Lock Switch is enabled, any series/folder with individual lock enabled is restricted."
+    )
+    
+    toggle_btn_text = "🔴 Disable Master Switch" if journey["lock_buttons_enabled"] else "🟢 Enable Master Switch"
+    active_btn_text = "🎬 Lock Active: ON" if journey["lock_active_series_enabled"] else "🎬 Lock Active: OFF"
+    old_btn_text = "⏳ Lock Old: ON" if journey["lock_old_series_enabled"] else "⏳ Lock Old: OFF"
+    day_based_btn_text = "⏱ Day-Based: ON" if journey["lock_day_based_enabled"] else "⏱ Day-Based: OFF"
+    indiv_btn_text = "🔓 Individual Lock: ON" if journey["lock_individual_enabled"] else "🔓 Individual Lock: OFF"
+    journey_lock_btn_text = "🔓 Unlock Entire Journey" if is_locked_val else "🔒 Lock Entire Journey"
+    
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(journey_lock_btn_text, callback_data=f"tog_j_is_locked_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton(toggle_btn_text, callback_data=f"tog_j_lock_b_{journey_id}"),
+            InlineKeyboardButton(old_btn_text, callback_data=f"tog_j_lock_o_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton(active_btn_text, callback_data=f"tog_j_lock_a_{journey_id}"),
+            InlineKeyboardButton(day_based_btn_text, callback_data=f"tog_j_lock_d_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton(indiv_btn_text, callback_data=f"tog_j_lock_i_{journey_id}"),
+            InlineKeyboardButton("🔄 Reset All Locks", callback_data=f"reset_j_locks_btn_{journey_id}")
+        ],
+        [
+            InlineKeyboardButton("📅 Edit Duration", callback_data=f"edit_j_unlock_dur_{journey_id}"),
+            InlineKeyboardButton("📁 Config Active List", callback_data=f"config_j_active_{journey_id}_0")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")
+        ]
+    ])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error rendering show_journey_lock_settings: {e}")
+
+async def show_journey_active_series_config(client: Client, chat_id: int, message_id: int, journey_id: int, skip: int = 0):
+    journey = await database.get_journey(journey_id)
+    if not journey:
+        return await show_manage_series(client, chat_id, message_id)
+        
+    series_list = await database.list_series(journey_id=journey_id)
+    limit = 5
+    
+    text = (
+        f"🎬 **Configure Active Series — {journey['name']}**\n\n"
+        "Select active/inactive series. Non-active series are locked for non-premium users.\n\n"
+        "• ✅ = Active (open to everyone)\n"
+        "• ❌ = Inactive (restricted to premium/subscribers)\n\n"
+        "Click on any series below to toggle active status:"
+    )
+    
+    buttons = []
+    sliced_list = series_list[skip:skip+limit]
+    
+    for s in sliced_list:
+        status_emoji = "✅" if s.get("is_active", True) else "❌"
+        buttons.append([
+            InlineKeyboardButton(f"{status_emoji} {s['title']}", callback_data=f"tog_j_ser_active_{journey_id}_{s['id']}_{skip}")
+        ])
+        
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"config_j_active_{journey_id}_{max(0, skip - limit)}"))
+    if skip + limit < len(series_list):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"config_j_active_{journey_id}_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([InlineKeyboardButton("🔙 Back to Locks Settings", callback_data=f"j_lock_settings_{journey_id}")])
+    try:
+        await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Error rendering show_journey_active_series_config: {e}")
+
+async def show_series_management_menu(client: Client, chat_id: int, message_id: int, journey_id: int):
     settings = await database.get_settings()
     limit = settings.get("series_buttons_per_page", 5)
     custom_msg = settings.get("series_library_custom_msg")
@@ -269,14 +482,14 @@ async def show_series_management_menu(client: Client, chat_id: int, message_id: 
     
     markup = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🔢 Edit Buttons per Page", callback_data="edit_series_pag_limit"),
-            InlineKeyboardButton("💬 Edit Library Message", callback_data="edit_series_library_msg")
+            InlineKeyboardButton("🔢 Edit Buttons per Page", callback_data=f"edit_series_pag_limit_{journey_id}"),
+            InlineKeyboardButton("💬 Edit Library Message", callback_data=f"edit_series_library_msg_{journey_id}")
         ],
         [
-            InlineKeyboardButton("↕️ Reorder Series List", callback_data="series_reorder_menu")
+            InlineKeyboardButton("↕️ Reorder Series List", callback_data=f"series_reorder_menu_{journey_id}")
         ],
         [
-            InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")
+            InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"list_j_series_{journey_id}_0")
         ]
     ])
     try:
@@ -284,7 +497,7 @@ async def show_series_management_menu(client: Client, chat_id: int, message_id: 
     except Exception as e:
         print(f"Error rendering series_management_menu: {e}")
 
-async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int, selected_ids: list = None):
+async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int, journey_id: int, selected_ids: list = None):
     if selected_ids is None:
         selected_ids = []
         
@@ -295,7 +508,7 @@ async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int
         }
         return emojis.get(num, f"[{num}]")
         
-    series_list = await database.list_series()
+    series_list = await database.list_series(journey_id=journey_id)
     text = (
         "↕️ **Reorder Video Series**\n\n"
         "Select the series in the order you want them to display. "
@@ -326,16 +539,16 @@ async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int
             
         row = [
             InlineKeyboardButton(f"🎬 {display_title}", callback_data="noop"),
-            InlineKeyboardButton(checkbox_text, callback_data=f"reorder_toggle_{sid}")
+            InlineKeyboardButton(checkbox_text, callback_data=f"reorder_toggle_{journey_id}_{sid}")
         ]
         buttons.append(row)
         
     if len(selected_ids) >= 2:
         buttons.append([
-            InlineKeyboardButton(f"✅ Confirm Reorder ({len(selected_ids)} selected)", callback_data="reorder_confirm")
+            InlineKeyboardButton(f"✅ Confirm Reorder ({len(selected_ids)} selected)", callback_data=f"reorder_confirm_{journey_id}")
         ])
         
-    buttons.append([InlineKeyboardButton("🔙 Back to Series Management", callback_data="series_management_menu")])
+    buttons.append([InlineKeyboardButton("🔙 Back to Series Management", callback_data=f"j_series_management_menu_{journey_id}")])
     
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -346,10 +559,7 @@ async def show_manage_files(client: Client, chat_id: int, message_id: int):
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📤 Store New File", callback_data="add_file"),
-            InlineKeyboardButton("➕ Create Series", callback_data="create_series")
-        ],
-        [
-            InlineKeyboardButton("🎬 Series Library", callback_data="manage_series")
+            InlineKeyboardButton("🗺️ Journey & Series Library", callback_data="manage_series")
         ],
         [
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")

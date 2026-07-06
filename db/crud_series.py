@@ -1,5 +1,5 @@
 import asyncio
-from .models import SessionLocal, Series, SeriesSection, FileRecord
+from .models import SessionLocal, Series, SeriesSection, FileRecord, Journey
 
 def _add_file_sync(file_code: str, message_id: int, file_name: str, file_size: int, mime_type: str, caption: str, series_id=None, episode_number=None, section_id=None):
     with SessionLocal() as session:
@@ -80,9 +80,13 @@ def _list_files_sync(skip=0, limit=20, search=None, series_id=None, section_id=N
         } for r in records]
         return files, total
 
-def _create_series_sync(title: str, description: str):
+def _create_series_sync(title: str, description: str, journey_id: int = None):
     with SessionLocal() as session:
-        s = Series(title=title, description=description)
+        if journey_id is None:
+            first_j = session.query(Journey).first()
+            if first_j:
+                journey_id = first_j.id
+        s = Series(title=title, description=description, journey_id=journey_id)
         session.add(s)
         session.commit()
         session.refresh(s)
@@ -101,13 +105,18 @@ def _get_series_sync(series_id: int):
                 "display_order": s.display_order,
                 "custom_pic": s.custom_pic,
                 "is_active": s.is_active,
+                "journey_id": s.journey_id,
+                "is_locked": s.is_locked,
                 "created_at": s.created_at
             }
         return None
 
-def _list_series_sync():
+def _list_series_sync(journey_id: int = None):
     with SessionLocal() as session:
-        series_list = session.query(Series).order_by(Series.display_order.asc(), Series.title.asc()).all()
+        query = session.query(Series)
+        if journey_id is not None:
+            query = query.filter(Series.journey_id == journey_id)
+        series_list = query.order_by(Series.display_order.asc(), Series.title.asc()).all()
         return [{
             "id": s.id,
             "title": s.title,
@@ -117,6 +126,8 @@ def _list_series_sync():
             "display_order": s.display_order,
             "custom_pic": s.custom_pic,
             "is_active": s.is_active,
+            "journey_id": s.journey_id,
+            "is_locked": s.is_locked,
             "created_at": s.created_at
         } for s in series_list]
 
@@ -150,6 +161,7 @@ def _get_section_sync(section_id: int):
                 "custom_msg": sec.custom_msg,
                 "buttons_per_row": sec.buttons_per_row,
                 "custom_pic": sec.custom_pic,
+                "is_locked": sec.is_locked,
                 "created_at": sec.created_at
             }
         return None
@@ -171,6 +183,7 @@ def _list_sections_sync(series_id: int, parent_id: int = None):
             "custom_msg": s.custom_msg,
             "buttons_per_row": s.buttons_per_row,
             "custom_pic": s.custom_pic,
+            "is_locked": s.is_locked,
             "created_at": s.created_at
         } for s in sections]
 
@@ -209,7 +222,7 @@ def _clear_section_files_sync(section_id: int):
         session.query(FileRecord).filter(FileRecord.section_id == section_id).delete()
         session.commit()
 
-def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None) -> bool:
+def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None, journey_id=None, is_locked=None) -> bool:
     with SessionLocal() as session:
         s = session.query(Series).filter(Series.id == series_id).first()
         if s:
@@ -227,11 +240,15 @@ def _update_series_settings_sync(series_id: int, custom_msg=None, buttons_per_ro
                 s.custom_pic = None if custom_pic == "none" else custom_pic
             if is_active is not None:
                 s.is_active = is_active
+            if journey_id is not None:
+                s.journey_id = journey_id
+            if is_locked is not None:
+                s.is_locked = is_locked
             session.commit()
             return True
         return False
 
-def _update_section_settings_sync(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None) -> bool:
+def _update_section_settings_sync(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None, is_locked=None) -> bool:
     with SessionLocal() as session:
         sec = session.query(SeriesSection).filter(SeriesSection.id == section_id).first()
         if sec:
@@ -241,19 +258,108 @@ def _update_section_settings_sync(section_id: int, custom_msg=None, buttons_per_
                 sec.buttons_per_row = buttons_per_row
             if custom_pic is not None:
                 sec.custom_pic = None if custom_pic == "none" else custom_pic
+            if is_locked is not None:
+                sec.is_locked = is_locked
             session.commit()
             return True
         return False
 
+# --- Journey CRUD ---
+def _create_journey_sync(name: str) -> int:
+    with SessionLocal() as session:
+        j = Journey(name=name)
+        session.add(j)
+        session.commit()
+        session.refresh(j)
+        return j.id
+
+def _get_journey_sync(journey_id: int):
+    with SessionLocal() as session:
+        j = session.query(Journey).filter(Journey.id == journey_id).first()
+        if j:
+            return {
+                "id": j.id,
+                "name": j.name,
+                "lock_buttons_enabled": j.lock_buttons_enabled,
+                "lock_active_series_enabled": j.lock_active_series_enabled,
+                "lock_old_series_enabled": j.lock_old_series_enabled,
+                "lock_day_based_enabled": j.lock_day_based_enabled,
+                "lock_time_window": j.lock_time_window,
+                "lock_individual_enabled": j.lock_individual_enabled,
+                "db_channel_id": j.db_channel_id,
+                "is_locked": j.is_locked
+            }
+        return None
+
+def _list_journeys_sync():
+    with SessionLocal() as session:
+        journeys = session.query(Journey).order_by(Journey.id.asc()).all()
+        return [{
+            "id": j.id,
+            "name": j.name,
+            "lock_buttons_enabled": j.lock_buttons_enabled,
+            "lock_active_series_enabled": j.lock_active_series_enabled,
+            "lock_old_series_enabled": j.lock_old_series_enabled,
+            "lock_day_based_enabled": j.lock_day_based_enabled,
+            "lock_time_window": j.lock_time_window,
+            "lock_individual_enabled": j.lock_individual_enabled,
+            "db_channel_id": j.db_channel_id,
+            "is_locked": j.is_locked
+        } for j in journeys]
+
+def _delete_journey_sync(journey_id: int) -> bool:
+    with SessionLocal() as session:
+        j = session.query(Journey).filter(Journey.id == journey_id).first()
+        if j:
+            session.delete(j)
+            session.commit()
+            return True
+        return False
+
+def _update_journey_settings_sync(journey_id: int, name=None, lock_buttons_enabled=None, lock_active_series_enabled=None, lock_old_series_enabled=None, lock_day_based_enabled=None, lock_time_window=None, lock_individual_enabled=None, db_channel_id=None, is_locked=None) -> bool:
+    with SessionLocal() as session:
+        j = session.query(Journey).filter(Journey.id == journey_id).first()
+        if j:
+            if name is not None:
+                j.name = name
+            if lock_buttons_enabled is not None:
+                j.lock_buttons_enabled = lock_buttons_enabled
+            if lock_active_series_enabled is not None:
+                j.lock_active_series_enabled = lock_active_series_enabled
+            if lock_old_series_enabled is not None:
+                j.lock_old_series_enabled = lock_old_series_enabled
+            if lock_day_based_enabled is not None:
+                j.lock_day_based_enabled = lock_day_based_enabled
+            if lock_time_window is not None:
+                j.lock_time_window = lock_time_window
+            if lock_individual_enabled is not None:
+                j.lock_individual_enabled = lock_individual_enabled
+            if db_channel_id is not None:
+                j.db_channel_id = db_channel_id
+            if is_locked is not None:
+                j.is_locked = is_locked
+            session.commit()
+            return True
+        return False
+
+def _reset_journey_locks_sync(journey_id: int) -> bool:
+    with SessionLocal() as session:
+        series_ids = [s.id for s in session.query(Series).filter(Series.journey_id == journey_id).all()]
+        if series_ids:
+            session.query(Series).filter(Series.id.in_(series_ids)).update({Series.is_locked: False}, synchronize_session=False)
+            session.query(SeriesSection).filter(SeriesSection.series_id.in_(series_ids)).update({SeriesSection.is_locked: False}, synchronize_session=False)
+        session.commit()
+        return True
+
 # --- Async wrappers ---
-async def create_series(title: str, description: str):
-    return await asyncio.to_thread(_create_series_sync, title, description)
+async def create_series(title: str, description: str, journey_id: int = None):
+    return await asyncio.to_thread(_create_series_sync, title, description, journey_id)
 
 async def get_series(series_id: int):
     return await asyncio.to_thread(_get_series_sync, series_id)
 
-async def list_series():
-    return await asyncio.to_thread(_list_series_sync)
+async def list_series(journey_id: int = None):
+    return await asyncio.to_thread(_list_series_sync, journey_id)
 
 async def delete_series(series_id: int):
     return await asyncio.to_thread(_delete_series_sync, series_id)
@@ -279,11 +385,29 @@ async def update_section(section_id: int, name: str) -> bool:
 async def clear_section_files(section_id: int):
     await asyncio.to_thread(_clear_section_files_sync, section_id)
 
-async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None):
-    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order, custom_pic, is_active)
+async def update_series_settings(series_id: int, custom_msg=None, buttons_per_row=None, title=None, description=None, display_order=None, custom_pic=None, is_active=None, journey_id=None, is_locked=None):
+    return await asyncio.to_thread(_update_series_settings_sync, series_id, custom_msg, buttons_per_row, title, description, display_order, custom_pic, is_active, journey_id, is_locked)
 
-async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None):
-    return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row, custom_pic)
+async def update_section_settings(section_id: int, custom_msg=None, buttons_per_row=None, custom_pic=None, is_locked=None):
+    return await asyncio.to_thread(_update_section_settings_sync, section_id, custom_msg, buttons_per_row, custom_pic, is_locked)
+
+async def create_journey(name: str):
+    return await asyncio.to_thread(_create_journey_sync, name)
+
+async def get_journey(journey_id: int):
+    return await asyncio.to_thread(_get_journey_sync, journey_id)
+
+async def list_journeys():
+    return await asyncio.to_thread(_list_journeys_sync)
+
+async def delete_journey(journey_id: int):
+    return await asyncio.to_thread(_delete_journey_sync, journey_id)
+
+async def update_journey_settings(journey_id: int, name=None, lock_buttons_enabled=None, lock_active_series_enabled=None, lock_old_series_enabled=None, lock_day_based_enabled=None, lock_time_window=None, lock_individual_enabled=None):
+    return await asyncio.to_thread(_update_journey_settings_sync, journey_id, name, lock_buttons_enabled, lock_active_series_enabled, lock_old_series_enabled, lock_day_based_enabled, lock_time_window, lock_individual_enabled)
+
+async def reset_journey_locks(journey_id: int):
+    return await asyncio.to_thread(_reset_journey_locks_sync, journey_id)
 
 async def add_file(file_code: str, message_id: int, file_name: str, file_size: int, mime_type: str, caption: str, series_id=None, episode_number=None, section_id=None):
     await asyncio.to_thread(_add_file_sync, file_code, message_id, file_name, file_size, mime_type, caption, series_id, episode_number, section_id)

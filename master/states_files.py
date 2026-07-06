@@ -122,6 +122,158 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         await message.reply_text(f"✅ Series '{title}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Series Library", callback_data="manage_series")]]))
         return True
 
+    # 2.5 Waiting for Journey Name
+    elif state == "waiting_for_journey_name":
+        name = message.text.strip()
+        if not name:
+            await message.reply_text("⚠️ Journey name cannot be empty. Try again or send /cancel.")
+            return True
+        
+        journey_id = await database.create_journey(name)
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"🗺️ **Journey Created**: {name} (ID: {journey_id}) by {message.from_user.mention}")
+        
+        from .ui_files import show_manage_series
+        if message_id:
+            try:
+                await show_manage_series(client, message.chat.id, message_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Journey '{name}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journeys", callback_data="manage_series")]]))
+        return True
+
+    # 2.6 Waiting for Rename Journey
+    elif state == "waiting_for_rename_journey":
+        name = message.text.strip()
+        if not name:
+            await message.reply_text("⚠️ Journey name cannot be empty. Try again or send /cancel.")
+            return True
+        
+        journey_id = state_data["data"]["journey_id"]
+        await database.update_journey_settings(journey_id, name=name)
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"✏️ **Journey Renamed**: {name} (ID: {journey_id}) by {message.from_user.mention}")
+        
+        from .ui_files import show_journey_detail
+        if message_id:
+            try:
+                await show_journey_detail(client, message.chat.id, message_id, journey_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Journey renamed to '{name}' successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
+        return True
+
+    # 2.7 Waiting for Series Title (in Journey)
+    elif state == "waiting_for_series_title_j":
+        title = message.text.strip()
+        if not title:
+            await message.reply_text("⚠️ Title cannot be empty. Try again or send /cancel.")
+            return True
+        
+        journey_id = state_data["data"]["journey_id"]
+        series_id = await database.create_series(title, "", journey_id=journey_id)
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"📂 **Series Created**: {title} (ID: {series_id}) in Journey {journey_id} by {message.from_user.mention}")
+        
+        from .ui_files import show_manage_series_journey
+        if message_id:
+            try:
+                await show_manage_series_journey(client, message.chat.id, message_id, journey_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Series '{title}' created successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"list_j_series_{journey_id}_0")]]))
+        return True
+
+    # 2.8 Waiting for Journey Unlock Duration
+    elif state == "waiting_for_j_unlock_duration":
+        val = message.text.strip().lower()
+        journey_id = state_data["data"]["journey_id"]
+        if val in ["0", "no", "disable", "none"]:
+            hours = 0
+        else:
+            import re
+            match = re.match(r"^(\d+)\s*(h|d)?$", val)
+            if not match:
+                return await message.reply_text(
+                    "⚠️ Invalid duration format. Please enter a number followed by `h` (hours) or `d` (days).\n"
+                    "Examples: `12h`, `2d`, or type `0` to disable duration lock."
+                )
+            num = int(match.group(1))
+            unit = match.group(2) or "h"
+            if unit == "d":
+                hours = num * 24
+            else:
+                hours = num
+                
+        await database.update_journey_settings(journey_id, lock_time_window=hours)
+        ADMIN_STATES.pop(user_id, None)
+        
+        if hours == 0:
+            feedback_str = "Unlock duration disabled (only the latest content stays unlocked)."
+        elif hours % 24 == 0:
+            feedback_str = f"Unlock duration set to {hours // 24} day(s)."
+        else:
+            feedback_str = f"Unlock duration set to {hours} hour(s)."
+            
+        await log_admin_action(f"🔒 **Lock Duration Updated** for Journey {journey_id}: `{feedback_str}` by {message.from_user.mention}")
+        
+        from .ui_files import show_journey_lock_settings
+        if message_id:
+            try:
+                await show_journey_lock_settings(client, message.chat.id, message_id, journey_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ {feedback_str}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Locks Settings", callback_data=f"j_lock_settings_{journey_id}")]]))
+        return True
+
+    # 2.9 Waiting for Journey DB Channel ID
+    elif state == "waiting_for_j_db_channel":
+        val = message.text.strip()
+        journey_id = state_data["data"]["journey_id"]
+        
+        if val.lower() in ["none", "default"]:
+            db_channel_id = ""
+            feedback = "Journey DB Channel reset to Default settings."
+        else:
+            if not val.startswith("-100") or not val[4:].isdigit():
+                if not (val.startswith("-") and val[1:].isdigit()) and not val.isdigit():
+                    await message.reply_text("⚠️ Invalid Channel ID format. Numerical ID starting with `-100` expected. Try again or send /cancel.")
+                    return True
+            db_channel_id = val
+            feedback = f"Journey DB Channel set to `{db_channel_id}`."
+            
+        await database.update_journey_settings(journey_id, db_channel_id=db_channel_id)
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"📁 **Journey DB Channel Updated** (ID: {journey_id}): `{feedback}` by {message.from_user.mention}")
+        
+        origin = state_data["data"].get("origin")
+        skip = state_data["data"].get("skip", 0)
+        
+        if origin == "list":
+            from .ui_admin import show_journey_db_channels
+            if message_id:
+                try:
+                    await show_journey_db_channels(client, message.chat.id, message_id, skip)
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(f"✅ {feedback}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey DBs", callback_data=f"manage_j_db_channels_{skip}")]]))
+            return True
+        else:
+            from .ui_files import show_journey_detail
+            if message_id:
+                try:
+                    await show_journey_detail(client, message.chat.id, message_id, journey_id)
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(f"✅ {feedback}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
+            return True
+
     # 4. Waiting for Tree Folder Name
     elif state == "waiting_for_tree_folder_name":
         name = message.text.strip()

@@ -7,7 +7,9 @@ from .helpers import (
 )
 from .ui_files import (
     show_folder_management, show_series_browse, show_manage_series, show_filesec_actions,
-    show_series_management_menu, show_series_reorder_menu
+    show_series_management_menu, show_series_reorder_menu,
+    show_journey_detail, show_manage_series_journey, show_journey_lock_settings,
+    show_journey_active_series_config
 )
 from .ui_config import show_auto_delete_menu
 
@@ -402,23 +404,274 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
                     await show_series_browse(client, callback.message.chat.id, callback.message.id, series_id, parent_folder_id if parent_folder_id and parent_folder_id > 0 else None, library_skip=library_skip)
         return True
 
-    elif data == "series_management_menu":
+    elif data.startswith("manage_journey_"):
+        journey_id = int(data.split("_")[2])
         await callback.answer()
-        ADMIN_STATES.pop(user_id, None)
-        await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+        await show_journey_detail(client, callback.message.chat.id, callback.message.id, journey_id)
         return True
 
-    elif data == "series_reorder_menu":
+    elif data == "create_journey_opt":
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": []}}
-        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, selected_ids=[])
+        ADMIN_STATES[user_id] = {"state": "waiting_for_journey_name", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "🗺️ **Create New Journey / Category**\n\nPlease enter the **Journey Name** (e.g., `Movies`, `Weekly Webseries`):\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="manage_series")]])
+        )
+        return True
+
+    elif data.startswith("rename_journey_opt_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_rename_journey", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
+        await callback.message.edit_text(
+            "✏️ **Rename Journey**\n\nPlease enter the new name for this journey:\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_journey_{journey_id}")]])
+        )
+        return True
+
+    elif data.startswith("delete_journey_opt_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        j = await database.get_journey(journey_id)
+        if not j:
+            return await callback.answer("Journey not found.", show_alert=True)
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⚠️ Yes, Delete Journey", callback_data=f"confirm_delete_j_{journey_id}"),
+                InlineKeyboardButton("❌ Cancel", callback_data=f"manage_journey_{journey_id}")
+            ]
+        ])
+        await callback.message.edit_text(
+            f"⚠️ **Confirm Delete Journey**\n\nAre you sure you want to delete **{j['name']}**?\n"
+            "This will delete ALL series, folders, and links associated with this journey! This action is permanent!",
+            reply_markup=markup
+        )
+        return True
+
+    elif data.startswith("confirm_delete_j_"):
+        journey_id = int(data.split("_")[3])
+        j = await database.get_journey(journey_id)
+        if j:
+            name = j["name"]
+            await database.delete_journey(journey_id)
+            await log_admin_action(f"🗑 **Journey Deleted**: `{name}` (ID: {journey_id}) by {callback.from_user.mention}")
+            await callback.answer("Journey deleted successfully.", show_alert=True)
+        else:
+            await callback.answer("Journey not found.")
+        await show_manage_series(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data.startswith("list_j_series_"):
+        parts = data.split("_")
+        journey_id = int(parts[3])
+        skip = int(parts[4])
+        await callback.answer()
+        await show_manage_series_journey(client, callback.message.chat.id, callback.message.id, journey_id, skip)
+        return True
+
+    elif data.startswith("create_series_j_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_series_title_j", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
+        await callback.message.edit_text(
+            "🎬 **Create New Series**\n\nPlease enter the **Series Title**:\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"list_j_series_{journey_id}_0")]])
+        )
+    elif data.startswith("config_j_db_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_j_db_channel", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
+        await callback.message.edit_text(
+            "📁 **Configure Journey DB Channel**\n\n"
+            "Please send the numerical channel ID (e.g., `-100123456789`) where files for this journey are stored.\n"
+            "Normal users on clone bots will download files directly from this channel.\n\n"
+            "To reset and use the default global DB channel, send `none` or `default`.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"manage_journey_{journey_id}")]])
+        )
+        return True
+
+    elif data.startswith("j_lock_settings_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_is_locked_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            new_val = not j.get("is_locked", False)
+            await database.update_journey_settings(journey_id, is_locked=new_val)
+            await callback.answer(f"Entire Journey Lock toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_lock_b_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            new_val = not j["lock_buttons_enabled"]
+            await database.update_journey_settings(journey_id, lock_buttons_enabled=new_val)
+            await callback.answer(f"Master Switch toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_lock_o_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            new_val = not j["lock_old_series_enabled"]
+            await database.update_journey_settings(journey_id, lock_old_series_enabled=new_val)
+            await callback.answer(f"Lock Old Series toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_lock_a_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            new_val = not j["lock_active_series_enabled"]
+            await database.update_journey_settings(journey_id, lock_active_series_enabled=new_val)
+            await callback.answer(f"Lock Active Series toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_lock_d_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            if not j["lock_active_series_enabled"]:
+                await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
+                return True
+            new_val = not j["lock_day_based_enabled"]
+            await database.update_journey_settings(journey_id, lock_day_based_enabled=new_val)
+            await callback.answer(f"Day-Based Lock toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("tog_j_lock_i_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j:
+            new_val = not j["lock_individual_enabled"]
+            await database.update_journey_settings(journey_id, lock_individual_enabled=new_val)
+            await callback.answer(f"Individual Lock Switch toggled to: {'ON' if new_val else 'OFF'}")
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("reset_j_locks_btn_"):
+        journey_id = int(data.split("_")[4])
+        await callback.answer()
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 Yes, Reset All Locks", callback_data=f"confirm_reset_locks_{journey_id}"),
+                InlineKeyboardButton("❌ Cancel", callback_data=f"j_lock_settings_{journey_id}")
+            ]
+        ])
+        await callback.message.edit_text(
+            "⚠️ **Confirm Reset All Individual Locks**\n\n"
+            "This will remove the individual lock status from ALL series and sections in this journey. "
+            "They will all be unlocked by default.",
+            reply_markup=markup
+        )
+        return True
+
+    elif data.startswith("confirm_reset_locks_"):
+        journey_id = int(data.split("_")[3])
+        await database.reset_journey_locks(journey_id)
+        await callback.answer("✅ All individual locks reset successfully!", show_alert=True)
+        await show_journey_lock_settings(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("edit_j_unlock_dur_"):
+        journey_id = int(data.split("_")[4])
+        j = await database.get_journey(journey_id)
+        if j and not j["lock_active_series_enabled"]:
+            await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
+            return True
+        await callback.answer()
+        current_window = j["lock_time_window"] if j else 0
+        ADMIN_STATES[user_id] = {"state": "waiting_for_j_unlock_duration", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
+        await callback.message.edit_text(
+            "⏱ **Edit Unlock Duration**\n\n"
+            "Specify the period during which new content remains unlocked for non-premium users.\n"
+            "Format: number followed by `h` (hours) or `d` (days).\n"
+            "Examples: `12h` (12 hours), `1d` (24 hours), `3d` (72 hours).\n\n"
+            f"Current Unlock Duration: `{current_window} hour(s)`\n"
+            "Type `0`, `no`, or `disable` to only keep the latest item unlocked.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"j_lock_settings_{journey_id}")]])
+        )
+        return True
+
+    elif data.startswith("config_j_active_"):
+        parts = data.split("_")
+        journey_id = int(parts[3])
+        skip = int(parts[4])
+        await callback.answer()
+        await show_journey_active_series_config(client, callback.message.chat.id, callback.message.id, journey_id, skip)
+        return True
+
+    elif data.startswith("tog_j_ser_active_"):
+        parts = data.split("_")
+        journey_id = int(parts[4])
+        series_id = int(parts[5])
+        skip = int(parts[6])
+        
+        series = await database.get_series(series_id)
+        if series:
+            new_status = not series.get("is_active", True)
+            await database.update_series_settings(series_id, is_active=new_status)
+            await callback.answer(f"Toggled {series['title']} active status to: {'Active' if new_status else 'Inactive'}")
+        else:
+            await callback.answer("Series not found.", show_alert=True)
+            
+        await show_journey_active_series_config(client, callback.message.chat.id, callback.message.id, journey_id, skip)
+        return True
+
+    elif data.startswith("toggle_indiv_lock_"):
+        parts = data.split("_")
+        series_id = int(parts[3])
+        section_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
+        await callback.answer()
+        if section_id == 0:
+            s = await database.get_series(series_id)
+            if s:
+                new_lock = not s.get("is_locked", False)
+                await database.update_series_settings(series_id, is_locked=new_lock)
+                await callback.answer(f"Individual Lock: {'ON' if new_lock else 'OFF'}")
+        else:
+            sec = await database.get_section(section_id)
+            if sec:
+                new_lock = not sec.get("is_locked", False)
+                await database.update_section_settings(section_id, is_locked=new_lock)
+                await callback.answer(f"Individual Lock: {'ON' if new_lock else 'OFF'}")
+        await show_folder_management(client, callback.message.chat.id, callback.message.id, series_id, section_id, library_skip=library_skip)
+        return True
+
+    elif data.startswith("j_series_management_menu_"):
+        journey_id = int(data.split("_")[4])
+        await callback.answer()
+        ADMIN_STATES.pop(user_id, None)
+        await show_series_management_menu(client, callback.message.chat.id, callback.message.id, journey_id)
+        return True
+
+    elif data.startswith("series_reorder_menu_"):
+        journey_id = int(data.split("_")[3])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": [], "journey_id": journey_id}}
+        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, journey_id, selected_ids=[])
         return True
 
     elif data.startswith("reorder_toggle_"):
-        series_id = int(data.split("_")[2])
+        parts = data.split("_")
+        journey_id = int(parts[2])
+        series_id = int(parts[3])
         await callback.answer()
         if user_id not in ADMIN_STATES or ADMIN_STATES[user_id].get("state") != "waiting_for_reorder":
-            ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": []}}
+            ADMIN_STATES[user_id] = {"state": "waiting_for_reorder", "message_id": callback.message.id, "data": {"selected_ids": [], "journey_id": journey_id}}
         
         selected_ids = ADMIN_STATES[user_id]["data"]["selected_ids"]
         if series_id in selected_ids:
@@ -426,13 +679,14 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         else:
             selected_ids.append(series_id)
             
-        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, selected_ids=selected_ids)
+        await show_series_reorder_menu(client, callback.message.chat.id, callback.message.id, journey_id, selected_ids=selected_ids)
         return True
 
-    elif data == "reorder_confirm":
+    elif data.startswith("reorder_confirm_"):
+        journey_id = int(data.split("_")[2])
         if user_id not in ADMIN_STATES or ADMIN_STATES[user_id].get("state") != "waiting_for_reorder":
             await callback.answer("❌ Error: Reordering session expired. Please start over.", show_alert=True)
-            await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+            await show_series_management_menu(client, callback.message.chat.id, callback.message.id, journey_id)
             return True
             
         selected_ids = ADMIN_STATES[user_id]["data"]["selected_ids"]
@@ -440,7 +694,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             await callback.answer("Please select at least 2 series to reorder.", show_alert=True)
             return True
             
-        series_list = await database.list_series()
+        series_list = await database.list_series(journey_id=journey_id)
         ordered_ids = []
         ordered_ids.extend(selected_ids)
         for s in series_list:
@@ -453,15 +707,16 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             
         ADMIN_STATES.pop(user_id, None)
         await callback.answer("✅ Series list reordered successfully!", show_alert=True)
-        await show_series_management_menu(client, callback.message.chat.id, callback.message.id)
+        await show_series_management_menu(client, callback.message.chat.id, callback.message.id, journey_id)
         return True
 
-    elif data == "edit_series_pag_limit":
+    elif data.startswith("edit_series_pag_limit_"):
+        journey_id = int(data.split("_")[4])
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_series_pag_limit", "message_id": callback.message.id}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_series_pag_limit", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
         await callback.message.edit_text(
             "🔢 **Edit Series Buttons per Page**\n\nEnter the number of series buttons to display on a single page for users (e.g., `5`):\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="series_management_menu")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"j_series_management_menu_{journey_id}")]])
         )
         return True
 
@@ -471,12 +726,13 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await show_manage_series(client, callback.message.chat.id, callback.message.id, skip=skip)
         return True
 
-    elif data == "edit_series_library_msg":
+    elif data.startswith("edit_series_library_msg_"):
+        journey_id = int(data.split("_")[4])
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_series_library_msg", "message_id": callback.message.id}
+        ADMIN_STATES[user_id] = {"state": "waiting_for_series_library_msg", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
         await callback.message.edit_text(
             "💬 **Edit Series Library Custom Message**\n\nEnter the custom display message to show above the series categories page. Send `none` to reset:\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="series_management_menu")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"j_series_management_menu_{journey_id}")]])
         )
         return True
 

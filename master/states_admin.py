@@ -27,6 +27,9 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
 
     # 1. Waiting for Broadcast Message
     if state == "waiting_for_broadcast":
+        target_info = state_data.get("data", {})
+        target_type = target_info.get("target", "main")
+        
         ADMIN_STATES.pop(user_id, None)
         if message_id:
             try:
@@ -38,20 +41,82 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
         success = 0
         failed = 0
         
-        for u in users:
-            try:
-                await message.copy(chat_id=u["user_id"])
-                success += 1
-                await asyncio.sleep(0.05)
-            except FloodWait as fw:
-                await asyncio.sleep(fw.value)
-                await message.copy(chat_id=u["user_id"])
-                success += 1
-            except Exception:
-                failed += 1
+        from clones.helpers import ACTIVE_CLONES
+        
+        # Determine the target client(s) to send the broadcast from
+        clients_to_broadcast = []
+        if target_type == "main":
+            clients_to_broadcast.append(("Main Bot", client))
+        elif target_type == "all_clones":
+            for token, clone_client in ACTIVE_CLONES.items():
+                name = getattr(clone_client.me, "username", None) or getattr(clone_client.me, "first_name", "Clone")
+                clients_to_broadcast.append((f"@{name}", clone_client))
+        elif target_type == "specific_clone":
+            token = target_info.get("token")
+            username = target_info.get("username", "Clone")
+            clone_client = ACTIVE_CLONES.get(token)
+            if not clone_client:
+                prefix = token.split(":")[0] if ":" in token else token
+                for t, c in ACTIVE_CLONES.items():
+                    if t.startswith(prefix):
+                        clone_client = c
+                        break
+            if clone_client:
+                clients_to_broadcast.append((f"@{username}", clone_client))
+            else:
+                report_text = f"❌ **Broadcast Failed**: Clone bot @{username} is not running in memory. Please start it first."
+                markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
+                if message_id:
+                    try:
+                        await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=report_text, reply_markup=markup)
+                    except Exception:
+                        await message.reply_text(report_text, reply_markup=markup)
+                else:
+                    await message.reply_text(report_text, reply_markup=markup)
+                return True
 
-        report_text = f"📢 **Broadcast Completed**\n\n✅ **Success:** {success}\n" \
-                      f"❌ **Failed:** {failed}"
+        if not clients_to_broadcast:
+            report_text = "❌ **Broadcast Failed**: No active bot targets found."
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
+            if message_id:
+                try:
+                    await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=report_text, reply_markup=markup)
+                except Exception:
+                    await message.reply_text(report_text, reply_markup=markup)
+            else:
+                await message.reply_text(report_text, reply_markup=markup)
+            return True
+
+        # Perform the broadcast
+        detail_results = []
+        for name, bot_client in clients_to_broadcast:
+            bot_success = 0
+            bot_failed = 0
+            for u in users:
+                try:
+                    await bot_client.copy_message(chat_id=u["user_id"], from_chat_id=message.chat.id, message_id=message.id)
+                    bot_success += 1
+                    await asyncio.sleep(0.05)
+                except FloodWait as fw:
+                    await asyncio.sleep(fw.value)
+                    try:
+                        await bot_client.copy_message(chat_id=u["user_id"], from_chat_id=message.chat.id, message_id=message.id)
+                        bot_success += 1
+                    except Exception:
+                        bot_failed += 1
+                except Exception:
+                    bot_failed += 1
+            success += bot_success
+            failed += bot_failed
+            detail_results.append(f"• **{name}:** ✅ {bot_success} | ❌ {bot_failed}")
+
+        detail_str = "\n".join(detail_results)
+        report_text = (
+            f"📢 **Broadcast Completed**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{detail_str}\n\n"
+            f"📊 **Total Success:** {success}\n"
+            f"❌ **Total Failed:** {failed}"
+        )
         
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
         if message_id:
@@ -552,11 +617,29 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
         if message_id:
             try:
                 await message.reply_text(text)
-                await show_lock_settings(client, message.chat.id, message_id)
+                from .callbacks_admin import handle_admin_callbacks
+                # We can call handle_admin_callbacks with "admin_settings" to show the admin settings panel
+                class DummyCallback:
+                    def __init__(self, client, chat_id, message_id, from_user):
+                        self.message = DummyMessage(chat_id, message_id)
+                        self.from_user = from_user
+                        self.data = "admin_settings"
+                    async def answer(self, *args, **kwargs):
+                        pass
+                class DummyMessage:
+                    def __init__(self, chat_id, message_id):
+                        self.chat = DummyChat(chat_id)
+                        self.id = message_id
+                    async def edit_text(self, *args, **kwargs):
+                        return await client.edit_message_text(chat_id=self.chat.id, message_id=self.id, *args, **kwargs)
+                class DummyChat:
+                    def __init__(self, chat_id):
+                        self.id = chat_id
+                await handle_admin_callbacks(client, DummyCallback(client, message.chat.id, message_id, message.from_user), "admin_settings")
             except Exception:
                 await message.reply_text(text)
         else:
-            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Lock Settings", callback_data="lock_settings")]]))
+            await message.reply_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Admin Settings", callback_data="admin_settings")]]))
         return True
 
     return False

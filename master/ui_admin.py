@@ -27,6 +27,9 @@ async def show_db_sync(client: Client, chat_id: int, message_id: int):
             InlineKeyboardButton(log_btn_text, callback_data=log_btn_cb)
         ],
         [
+            InlineKeyboardButton("📁 Journey DB Channels", callback_data="manage_j_db_channels_0")
+        ],
+        [
             InlineKeyboardButton("🔄 Run File Integrity Scan", callback_data="run_integrity"),
             InlineKeyboardButton("⏱ DB Upload Delay", callback_data="edit_db_upload_delay")
         ],
@@ -154,7 +157,7 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
     settings = await database.get_settings()
     
     access_status = "Enabled 🔓" if settings.get("access_to_all", True) else "Disabled (Restricted to Subscribers) 🔒"
-    testing_mode_status = "Enabled 🧪 (Premium access blocked)" if settings.get("testing_mode", False) else "Disabled ❌"
+    testing_mode_status = "Enabled 🧪 (Bot blocked for non-admins)" if settings.get("testing_mode", False) else "Disabled ❌ (Bot fully open)"
     
     text = f"👥 **User & Subscribers Management**\n\n" \
            f"📈 **Total Users (database):** `{total_users}`\n" \
@@ -165,6 +168,7 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
            f"Select an option below to manage subscribers and access permissions:"
            
     toggle_text = "🔒 Restrict Access" if settings.get("access_to_all", True) else "🔓 Enable Access"
+    toggle_testing_text = "🔴 Disable Testing" if settings.get("testing_mode", False) else "🟢 Enable Testing"
     markup = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("➕ Subscribe User", callback_data="add_subscriber"),
@@ -176,6 +180,9 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
         ],
         [
             InlineKeyboardButton("📢 Broadcast Msg", callback_data="broadcast_subs"),
+            InlineKeyboardButton(toggle_testing_text, callback_data="toggle_testing_mode_sub")
+        ],
+        [
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")
         ]
     ])
@@ -187,7 +194,7 @@ async def show_sub_mgr(client: Client, chat_id: int, message_id: int):
 async def show_premium_users_panel(client: Client, chat_id: int, message_id: int):
     premium_count = await database.get_premium_cache_count()
     settings = await database.get_settings()
-    testing_mode_status = "Enabled 🧪 (Premium access blocked)" if settings.get("testing_mode", False) else "Disabled ❌ (Premium access allowed)"
+    testing_mode_status = "Enabled 🧪 (Bot blocked for non-admins)" if settings.get("testing_mode", False) else "Disabled ❌ (Bot fully open)"
     
     db_url = settings.get("subscription_db_url")
     if db_url:
@@ -355,3 +362,44 @@ async def show_active_series_config(client: Client, chat_id: int, message_id: in
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     except Exception as e:
         print(f"Error rendering active_series_config: {e}")
+
+async def show_journey_db_channels(client: Client, chat_id: int, message_id: int, skip: int = 0):
+    journeys = await database.list_journeys()
+    limit = 5
+    sliced_list = journeys[skip:skip+limit]
+    
+    text = "🗺️ **Journey DB Channels Management**\n\n" \
+           "Manage all database storage channels for your journeys in one place. " \
+           "If no channel is set, the bot will use the default storage channel.\n\n"
+           
+    buttons = []
+    
+    for idx, j in enumerate(sliced_list):
+        db_chan = j.get("db_channel_id") or ""
+        db_disp = f"`{db_chan}`" if db_chan else "_Default fallback ⚠️_"
+        text += f"**{skip + idx + 1}. {j['name']}**\n" \
+                f"🔌 DB Channel: {db_disp}\n\n"
+                
+        buttons.append([
+            InlineKeyboardButton(f"✏️ Config {j['name']}", callback_data=f"config_j_db_list_{j['id']}_{skip}")
+        ])
+        
+    pag_row = []
+    if skip > 0:
+        pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"manage_j_db_channels_{max(0, skip - limit)}"))
+    if skip + limit < len(journeys):
+        pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"manage_j_db_channels_{skip + limit}"))
+    if pag_row:
+        buttons.append(pag_row)
+        
+    buttons.append([InlineKeyboardButton("🔙 Back to DB Sync", callback_data="db_sync")])
+    
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        print(f"Error rendering journey_db_channels: {e}")

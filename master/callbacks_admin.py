@@ -12,7 +12,7 @@ from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
     get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr,
     show_remove_subscriber_menu, show_lock_settings, show_active_series_config,
-    show_premium_users_panel
+    show_premium_users_panel, show_journey_db_channels
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -23,6 +23,36 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
     if data == "db_sync":
         await callback.answer()
         await show_db_sync(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data.startswith("manage_j_db_channels_"):
+        skip = int(data.split("_")[4])
+        await callback.answer()
+        await show_journey_db_channels(client, callback.message.chat.id, callback.message.id, skip)
+        return True
+
+    elif data.startswith("config_j_db_list_"):
+        parts = data.split("_")
+        journey_id = int(parts[4])
+        skip = int(parts[5])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_j_db_channel",
+            "message_id": callback.message.id,
+            "data": {
+                "journey_id": journey_id,
+                "origin": "list",
+                "skip": skip
+            }
+        }
+        await callback.message.edit_text(
+            "📁 **Configure Journey DB Channel**\n\n"
+            "Please send the numerical channel ID (e.g., `-100123456789`) where files for this journey are stored.\n"
+            "Normal users on clone bots will download files directly from this channel.\n\n"
+            "To reset and use the default global DB channel, send `none` or `default`.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"manage_j_db_channels_{skip}")]])
+        )
         return True
 
     elif data == "edit_db_upload_delay":
@@ -69,6 +99,16 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         await show_premium_users_panel(client, callback.message.chat.id, callback.message.id)
         return True
 
+    elif data == "toggle_testing_mode_sub":
+        await callback.answer()
+        settings = await database.get_settings()
+        new_val = not settings.get("testing_mode", False)
+        await database.update_settings({"testing_mode": new_val})
+        status_str = "Enabled 🧪" if new_val else "Disabled ❌"
+        await callback.answer(f"🧪 Testing Mode: {status_str}", show_alert=True)
+        await show_sub_mgr(client, callback.message.chat.id, callback.message.id)
+        return True
+
 
     elif data == "toggle_access_to_all":
         await callback.answer()
@@ -107,12 +147,115 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
 
     elif data == "broadcast_subs":
         await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_broadcast", "message_id": callback.message.id}
+        text = (
+            "📢 **Broadcast Message Target Selection**\n\n"
+            "Choose the bot(s) to send the broadcast message from. "
+            "Please note that users must have started the respective target bot to receive the message."
+        )
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🤖 Main Bot Only", callback_data="bcast_target_main")
+            ],
+            [
+                InlineKeyboardButton("🤖 All Cloned Bots Only", callback_data="bcast_target_all_clones")
+            ],
+            [
+                InlineKeyboardButton("🤖 Specific Cloned Bot", callback_data="bcast_target_clone_list_0")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Subscribers Mgr", callback_data="sub_mgr")
+            ]
+        ])
+        await callback.message.edit_text(text, reply_markup=markup)
+        return True
+
+    elif data == "bcast_target_main":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_broadcast",
+            "message_id": callback.message.id,
+            "data": {"target": "main"}
+        }
         await callback.message.edit_text(
-            "📢 **Broadcast Message to All Subscribers**\n\n"
-            "Please send or forward the message you want to broadcast to all bot users.\n\n"
-            "❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="sub_mgr")]])
+            "📢 **Broadcast: Main Bot**\n\n"
+            "Please send or forward the message you want to broadcast to all main bot users.\n\n"
+            "❌ Send /cancel to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="broadcast_subs")]])
+        )
+        return True
+
+    elif data == "bcast_target_all_clones":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_broadcast",
+            "message_id": callback.message.id,
+            "data": {"target": "all_clones"}
+        }
+        await callback.message.edit_text(
+            "📢 **Broadcast: All Cloned Bots**\n\n"
+            "Please send or forward the message you want to broadcast concurrently from all active clone bots.\n\n"
+            "❌ Send /cancel to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="broadcast_subs")]])
+        )
+        return True
+
+    elif data.startswith("bcast_target_clone_list_"):
+        await callback.answer()
+        skip = int(data.split("_")[4])
+        bots = await database.get_clone_bots()
+        
+        text = "📢 **Select Cloned Bot for Broadcast**\n\nChoose the specific clone bot to broadcast from:\n\n"
+        buttons = []
+        limit = 5
+        sliced_list = bots[skip:skip+limit]
+        
+        if not sliced_list:
+            text += "_No clone bots registered yet._"
+        else:
+            for b in sliced_list:
+                bot_id = b["token"].split(":")[0] if ":" in b["token"] else b["token"]
+                status = "🟢" if b["is_active"] else "🔴"
+                text += f"▪️ {status} **{b['name']}** (@{b['username']})\n"
+                buttons.append([
+                    InlineKeyboardButton(f"🤖 {b['name']} (@{b['username']})", callback_data=f"bcast_target_spec_{bot_id}")
+                ])
+                
+        pag_row = []
+        if skip > 0:
+            pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"bcast_target_clone_list_{max(0, skip - limit)}"))
+        if skip + limit < len(bots):
+            pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"bcast_target_clone_list_{skip + limit}"))
+        if pag_row:
+            buttons.append(pag_row)
+            
+        buttons.append([InlineKeyboardButton("🔙 Back to Selection", callback_data="broadcast_subs")])
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        return True
+
+    elif data.startswith("bcast_target_spec_"):
+        await callback.answer()
+        bot_id = data.split("_")[3]
+        bots = await database.get_clone_bots()
+        target_bot = None
+        for b in bots:
+            curr_id = b["token"].split(":")[0] if ":" in b["token"] else b["token"]
+            if curr_id == bot_id:
+                target_bot = b
+                break
+                
+        if not target_bot:
+            return await callback.message.edit_text("❌ Clone bot not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="broadcast_subs")]]))
+            
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_broadcast",
+            "message_id": callback.message.id,
+            "data": {"target": "specific_clone", "token": target_bot["token"], "username": target_bot["username"]}
+        }
+        await callback.message.edit_text(
+            f"📢 **Broadcast: Clone bot @{target_bot['username']}**\n\n"
+            "Please send or forward the message you want to broadcast from this clone bot.\n\n"
+            "❌ Send /cancel to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="broadcast_subs")]])
         )
         return True
 
@@ -236,6 +379,8 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
     # --- Admin and Clone Bot actions ---
     elif data == "admin_settings":
         await callback.answer()
+        settings = await database.get_settings()
+        add_bot_status_str = "Premium Only 🔒" if settings.get("clone_bot_premium_only") else "Free for All 🔓"
         text = "🛡️ **Security & Admin Settings Panel**\n\nChoose an action below to manage administrators or clone bot configurations:"
         markup = InlineKeyboardMarkup([
             [
@@ -243,7 +388,30 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
                 InlineKeyboardButton("🤖 Deploy Clone Bots", callback_data="manage_clones")
             ],
             [
-                InlineKeyboardButton("🔒 Lock Button Settings", callback_data="lock_settings")
+                InlineKeyboardButton(f"🤖 Clone Creation: {add_bot_status_str}", callback_data="toggle_add_bot_mode")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back Panel", callback_data="main_panel")
+            ]
+        ])
+        await callback.message.edit_text(text, reply_markup=markup)
+        return True
+
+    elif data == "toggle_add_bot_mode":
+        settings = await database.get_settings()
+        new_val = not settings.get("clone_bot_premium_only", False)
+        await database.update_settings({"clone_bot_premium_only": new_val})
+        await callback.answer(f"Clone Creation set to: {'Premium Only' if new_val else 'Free for All'}")
+        
+        add_bot_status_str = "Premium Only 🔒" if new_val else "Free for All 🔓"
+        text = "🛡️ **Security & Admin Settings Panel**\n\nChoose an action below to manage administrators or clone bot configurations:"
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🛡️ Manage Administrators", callback_data="mgr_admins"),
+                InlineKeyboardButton("🤖 Deploy Clone Bots", callback_data="manage_clones")
+            ],
+            [
+                InlineKeyboardButton(f"🤖 Clone Creation: {add_bot_status_str}", callback_data="toggle_add_bot_mode")
             ],
             [
                 InlineKeyboardButton("🔙 Back Panel", callback_data="main_panel")
@@ -373,88 +541,6 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         await show_manage_clones(client, callback.message.chat.id, callback.message.id)
         return True
 
-    elif data == "lock_settings":
-        await callback.answer()
-        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
-        return True
-
-    elif data == "edit_unlock_duration":
-        settings = await database.get_settings()
-        if not settings.get("lock_active_series_enabled", False):
-            await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
-            return True
-        await callback.answer()
-        current_window = settings.get("lock_time_window", 0)
-        ADMIN_STATES[user_id] = {"state": "waiting_for_unlock_duration", "message_id": callback.message.id}
-        await callback.message.edit_text(
-            "⏱ **Edit Unlock Duration**\n\n"
-            "Specify the period during which new content remains unlocked for non-premium users.\n"
-            "Format: number followed by `h` (hours) or `d` (days).\n"
-            "Examples: `12h` (12 hours), `1d` (24 hours), `3d` (72 hours).\n\n"
-            f"Current Unlock Duration: `{current_window} hour(s)`\n"
-            "Type `0`, `no`, or `disable` to only keep the latest item unlocked.\n\n"
-            "❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="lock_settings")]])
-        )
-        return True
-
-    elif data == "toggle_lock_buttons":
-        settings = await database.get_settings()
-        new_status = not settings.get("lock_buttons_enabled", False)
-        await database.update_settings({"lock_buttons_enabled": new_status})
-        await callback.answer(f"Lock Buttons toggled to: {'Enabled' if new_status else 'Disabled'}")
-        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
-        return True
-
-    elif data.startswith("config_active_series_"):
-        await callback.answer()
-        skip = int(data.split("_")[3])
-        await show_active_series_config(client, callback.message.chat.id, callback.message.id, skip)
-        return True
-
-    elif data.startswith("toggle_series_active_"):
-        parts = data.split("_")
-        series_id = int(parts[3])
-        skip = int(parts[4])
-        
-        series = await database.get_series(series_id)
-        if series:
-            new_status = not series.get("is_active", True)
-            await database.update_series_settings(series_id, is_active=new_status)
-            await callback.answer(f"Toggled {series['title']} active status to: {'Active' if new_status else 'Inactive'}")
-        else:
-            await callback.answer("Series not found.", show_alert=True)
-            
-        await show_active_series_config(client, callback.message.chat.id, callback.message.id, skip)
-        return True
-
-    elif data == "toggle_lock_active":
-        settings = await database.get_settings()
-        new_status = not settings.get("lock_active_series_enabled", False)
-        await database.update_settings({"lock_active_series_enabled": new_status})
-        await callback.answer(f"Lock Active Series toggled to: {'Enabled' if new_status else 'Disabled'}")
-        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
-        return True
-
-    elif data == "toggle_lock_old":
-        settings = await database.get_settings()
-        new_status = not settings.get("lock_old_series_enabled", True)
-        await database.update_settings({"lock_old_series_enabled": new_status})
-        await callback.answer(f"Lock Old Series toggled to: {'Enabled' if new_status else 'Disabled'}")
-        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
-        return True
-
-    elif data == "toggle_lock_day_based":
-        settings = await database.get_settings()
-        if not settings.get("lock_active_series_enabled", False):
-            await callback.answer("⚠️ Please enable 'Lock Active Series' first!", show_alert=True)
-            return True
-        new_status = not settings.get("lock_day_based_enabled", False)
-        await database.update_settings({"lock_day_based_enabled": new_status})
-        await callback.answer(f"Day-Based Lock toggled to: {'Enabled' if new_status else 'Disabled'}")
-        await show_lock_settings(client, callback.message.chat.id, callback.message.id)
-        return True
-
     elif data == "config_subscription_db_url":
         await callback.answer()
         settings = await database.get_settings()
@@ -489,7 +575,7 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
             f"Current Message Template:\n```\n{current_msg}\n```\n\n"
             "Type `none` or `default` to revert to using the default dynamic template.\n\n"
             "❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="lock_settings")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="admin_settings")]])
         )
         return True
 

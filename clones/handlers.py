@@ -79,20 +79,20 @@ async def clone_explore_handler(client: Client, message: Message):
     if not await check_clone_access(user_id):
         await send_clone_access_denied(client, message)
         return
-    series_list = await database.list_series()
-    text = "🎬 **Browse Categories & Series**\n\nSelect a series to browse:\n\n"
+    journeys = await database.list_journeys()
+    text = "🗺️ **Browse Categories & Journeys**\n\nSelect a category/journey to explore:\n\n"
     buttons = []
     
-    sliced_list = series_list[0:5]
+    sliced_list = journeys[0:5]
     if not sliced_list:
-        text += "_No series available._"
+        text += "_No journeys available._"
     else:
-        for s in sliced_list:
-            text += f"▪️ **{s['title']}**\n"
-            buttons.append([InlineKeyboardButton(f"🎬 View {s['title'][:25]}", callback_data=f"cl_series_{s['id']}_0")])
+        for j in sliced_list:
+            text += f"▪️ **{j['name']}**\n"
+            buttons.append([InlineKeyboardButton(f"🗺️ View {j['name'][:25]}", callback_data=f"cl_journey_{j['id']}_0")])
     
     pag_row = []
-    if len(series_list) > 5:
+    if len(journeys) > 5:
         pag_row.append(InlineKeyboardButton("Next ➡️", callback_data="cl_browse_series_5"))
     if pag_row:
         buttons.append(pag_row)
@@ -106,22 +106,28 @@ async def clone_available_series_handler(client: Client, message: Message):
         await send_clone_access_denied(client, message)
         return
     
-    series_list = await database.list_series()
-    if not series_list:
-        await message.reply_text("🎬 **No series available at the moment.**\n\nCheck back later!")
+    journeys = await database.list_journeys()
+    if not journeys:
+        await message.reply_text("🎬 **No categories available at the moment.**\n\nCheck back later!")
         return
 
-    text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\nHere are the series currently available in the bot:\n\n"
+    text = "🎬 **Available Series Library** 🎬\n━━━━━━━━━━━━━━━━━━━━\n\n"
     
     from config import OWNER_ID
     is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
     
-    for s in series_list:
-        is_series_unlocked = s.get("is_active", True) or is_user_premium
-        lock_emoji = "" if is_series_unlocked else "🔒 "
-        text += f"▪️ {lock_emoji}**{s['title']}**\n"
-        if s.get('description'):
-            text += f"   └ _{s['description']}_\n"
+    for j in journeys:
+        series_list = await database.list_series(journey_id=j["id"])
+        if not series_list:
+            continue
+            
+        text += f"🗺️ **{j['name']}**\n"
+        for s in series_list:
+            is_series_unlocked = s.get("is_active", True) or is_user_premium
+            lock_emoji = "" if is_series_unlocked else "🔒 "
+            text += f" ▪️ {lock_emoji}**{s['title']}**\n"
+            if s.get('description'):
+                text += f"    └ _{s['description']}_\n"
         text += "\n"
         
     text += "━━━━━━━━━━━━━━━━━━━━\n"

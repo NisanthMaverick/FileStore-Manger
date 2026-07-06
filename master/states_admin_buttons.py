@@ -109,10 +109,14 @@ async def handle_buttons_states(client: Client, message: Message, state: str, st
             ADMIN_STATES.pop(user_id, None)
             await log_admin_action(f"🛡️ **Clone Bot Added**: @{bot_me.username} ({bot_me.first_name}) by {message.from_user.mention}")
             
-            if message_id:
-                await show_manage_clones(client, message.chat.id, message_id)
+            is_user_admin = await database.is_admin(user_id, OWNER_ID)
+            if is_user_admin:
+                if message_id:
+                    await show_manage_clones(client, message.chat.id, message_id)
+                else:
+                    await message.reply_text("✅ Clone Bot added!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Clones", callback_data="manage_clones")]]))
             else:
-                await message.reply_text("✅ Clone Bot added!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Clones", callback_data="manage_clones")]]))
+                await message.reply_text(f"✅ Clone Bot @{bot_me.username} added and deployed successfully!")
         except Exception as e:
             err_text = f"❌ Failed to validate token: {e}\n\nPlease check the token and send it again or send /cancel."
             if message_id:

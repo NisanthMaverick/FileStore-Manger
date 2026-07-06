@@ -39,6 +39,7 @@ class Settings(Base):
     lock_day_based_enabled = Column(Boolean, default=False)
     subscription_db_url = Column(Text, default=None)
     more_info_msg = Column(Text, default=None)
+    clone_bot_premium_only = Column(Boolean, default=False)
 
 
 
@@ -50,6 +51,19 @@ class CloneBot(Base):
     name = Column(String, nullable=False)
     is_active = Column(Boolean, default=False)
 
+class Journey(Base):
+    __tablename__ = "journeys"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    lock_buttons_enabled = Column(Boolean, default=False)
+    lock_active_series_enabled = Column(Boolean, default=False)
+    lock_old_series_enabled = Column(Boolean, default=True)
+    lock_day_based_enabled = Column(Boolean, default=False)
+    lock_time_window = Column(Integer, default=0)
+    lock_individual_enabled = Column(Boolean, default=False)
+    db_channel_id = Column(String, default="")
+    is_locked = Column(Boolean, default=False)
+
 class Series(Base):
     __tablename__ = "series"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -60,6 +74,8 @@ class Series(Base):
     display_order = Column(Integer, default=0)
     custom_pic = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    journey_id = Column(Integer, ForeignKey("journeys.id", ondelete="CASCADE"), nullable=True)
+    is_locked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class SeriesSection(Base):
@@ -72,6 +88,7 @@ class SeriesSection(Base):
     custom_msg = Column(Text, nullable=True)
     buttons_per_row = Column(Integer, default=2)
     custom_pic = Column(String, nullable=True)
+    is_locked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class FileRecord(Base):
@@ -227,6 +244,21 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN more_info_msg TEXT DEFAULT NULL"))
             conn.commit()
+    if "clone_bot_premium_only" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN clone_bot_premium_only BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+
+    # journeys columns check
+    columns_journeys = [c["name"] for c in inspector.get_columns("journeys")]
+    if "db_channel_id" not in columns_journeys:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE journeys ADD COLUMN db_channel_id VARCHAR DEFAULT ''"))
+            conn.commit()
+    if "is_locked" not in columns_journeys:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE journeys ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            conn.commit()
 
 
 
@@ -252,9 +284,24 @@ def db_init():
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series ADD COLUMN is_active BOOLEAN DEFAULT TRUE"))
             conn.commit()
+    if "journey_id" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN journey_id INTEGER REFERENCES journeys(id) ON DELETE CASCADE"))
+            conn.commit()
+    if "is_locked" not in columns_ser:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            conn.commit()
     if "created_at" not in columns_ser:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE series ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+            conn.commit()
+
+    # series_sections is_locked column check
+    columns_sec = [c["name"] for c in inspector.get_columns("series_sections")]
+    if "is_locked" not in columns_sec:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE series_sections ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
             conn.commit()
 
     # Auto-migrate: any section that owns file records must be sec_type='files'
@@ -273,3 +320,27 @@ def db_init():
             settings = Settings(id=1)
             session.add(settings)
             session.commit()
+
+    # Ensure a default Journey exists and update NULL journey_id
+    with SessionLocal() as session:
+        journey_count = session.query(Journey).count()
+        if journey_count == 0:
+            default_journey = Journey(
+                name="Weekly Webseries",
+                lock_buttons_enabled=False,
+                lock_active_series_enabled=False,
+                lock_old_series_enabled=True,
+                lock_day_based_enabled=False,
+                lock_time_window=0,
+                lock_individual_enabled=False
+            )
+            session.add(default_journey)
+            session.commit()
+            session.refresh(default_journey)
+            session.query(Series).filter(Series.journey_id == None).update({Series.journey_id: default_journey.id})
+            session.commit()
+        else:
+            first_journey = session.query(Journey).first()
+            if first_journey:
+                session.query(Series).filter(Series.journey_id == None).update({Series.journey_id: first_journey.id})
+                session.commit()

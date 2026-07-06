@@ -26,7 +26,7 @@ async def handle_files_callbacks(client: Client, callback: CallbackQuery, data: 
 
     elif data == "manage_files":
         await callback.answer()
-        await show_manage_files(client, callback.message.chat.id, callback.message.id)
+        await show_manage_series(client, callback.message.chat.id, callback.message.id)
         return True
 
     elif data == "add_file":

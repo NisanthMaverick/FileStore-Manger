@@ -26,10 +26,45 @@ import database
 from config import OWNER_ID
 from . import helpers as main_helpers
 from .helpers import ADMIN_STATES
-from .handlers import start_handler, cancel_handler, id_handler, explore_handler, master_available_series_handler
+from .handlers import start_handler, cancel_handler, id_handler, explore_handler, master_available_series_handler, user_add_bot_handler
 
 def register_main_bot_handlers(app: Client):
     main_helpers.main_bot_client = app
+
+    @app.on_message(filters.private, group=-1)
+    async def block_testing_messages(client: Client, message: Message):
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            return
+        is_admin = await database.is_admin(user_id, OWNER_ID)
+        if is_admin:
+            return
+        settings = await database.get_settings()
+        if settings.get("testing_mode", False):
+            await database.add_user(user_id, message.from_user.username or "", message.from_user.first_name or "")
+            await message.reply_text(
+                "⚠️ **Testing Mode Active**\n\n"
+                "This bot is currently in user testing mode as we are adding new features. "
+                "Once it is open, you can use it. Please come back and try again after some time."
+            )
+            message.stop_propagation()
+
+    @app.on_callback_query(group=-1)
+    async def block_testing_callbacks(client: Client, callback: CallbackQuery):
+        user_id = callback.from_user.id if callback.from_user else None
+        if not user_id:
+            return
+        is_admin = await database.is_admin(user_id, OWNER_ID)
+        if is_admin:
+            return
+        settings = await database.get_settings()
+        if settings.get("testing_mode", False):
+            await callback.answer(
+                "⚠️ This bot is currently in user testing mode as we are adding new features. "
+                "Once it is open, you can use it. Please come back and try again after some time.",
+                show_alert=True
+            )
+            callback.stop_propagation()
 
     # --- Message Command Handlers ---
     @app.on_message(filters.command("start") & filters.private)
@@ -52,8 +87,12 @@ def register_main_bot_handlers(app: Client):
     async def cmd_avail_series(client: Client, message: Message):
         await master_available_series_handler(client, message)
 
+    @app.on_message(filters.command(["addbot", "add_bot"]) & filters.private)
+    async def cmd_addbot(client: Client, message: Message):
+        await user_add_bot_handler(client, message)
+
     # --- Private Messages State Input Handler ---
-    @app.on_message(filters.private & ~filters.command(["start", "cancel", "id", "explorefiles", "availableseries"]))
+    @app.on_message(filters.private & ~filters.command(["start", "cancel", "id", "explorefiles", "availableseries", "addbot", "add_bot"]))
     async def msg_state(client: Client, message: Message):
         user_id = message.from_user.id
         if user_id not in ADMIN_STATES:

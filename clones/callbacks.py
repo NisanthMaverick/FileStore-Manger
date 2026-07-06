@@ -40,39 +40,59 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
     elif data.startswith("cl_series_"):
         series_id = int(data.split("_")[2])
         series = await database.get_series(series_id)
-        if series and not series.get("is_active", True):
-            is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+        if series:
+            journey = None
+            if series.get("journey_id"):
+                journey = await database.get_journey(series["journey_id"])
+            if not journey:
+                journey = {
+                    "lock_buttons_enabled": False,
+                    "lock_active_series_enabled": False,
+                    "lock_old_series_enabled": True,
+                    "lock_day_based_enabled": False,
+                    "lock_time_window": 0,
+                    "lock_individual_enabled": False
+                }
             
-            if not is_user_premium:
-                await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
-                owner_username = None
-                try:
-                    owner_user = await client.get_users(OWNER_ID)
-                    if owner_user and owner_user.username:
-                        owner_username = owner_user.username
-                except Exception:
-                    pass
-                contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
-                
-                text = (
-                    "🔒 **Premium Access Required**\n\n"
-                    "You are not a premium user to see old series/content.\n"
-                    "Please buy a subscription or contact the administrator if you have any issues."
-                )
-                markup = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
-                        InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
-                    ],
-                    [
-                        InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
-                    ],
-                    [
-                        InlineKeyboardButton("🔙 Back to Series Library", callback_data="cl_browse_series_0")
-                    ]
-                ])
-                await callback.message.edit_text(text, reply_markup=markup)
-                return
+            is_locked = False
+            if journey.get("lock_buttons_enabled", False):
+                if not series.get("is_active", True) and journey.get("lock_old_series_enabled", True):
+                    is_locked = True
+                elif journey.get("lock_individual_enabled", False) and series.get("is_locked", False):
+                    is_locked = True
+            
+            if is_locked:
+                is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+                if not is_user_premium:
+                    await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
+                    owner_username = None
+                    try:
+                        owner_user = await client.get_users(OWNER_ID)
+                        if owner_user and owner_user.username:
+                            owner_username = owner_user.username
+                    except Exception:
+                        pass
+                    contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+                    
+                    text = (
+                        "🔒 **Premium Access Required**\n\n"
+                        "You are not a premium user to see old series/content.\n"
+                        "Please buy a subscription or contact the administrator if you have any issues."
+                    )
+                    markup = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
+                            InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+                        ],
+                        [
+                            InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
+                        ],
+                        [
+                            InlineKeyboardButton("🔙 Back to Categories", callback_data=f"cl_journey_{series['journey_id'] or 0}_0")
+                        ]
+                    ])
+                    await callback.message.edit_text(text, reply_markup=markup)
+                    return
 
         await callback.answer()
         await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
@@ -87,6 +107,13 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             if sec and sec.get("sec_type") == "files":
                 settings = await database.get_settings()
                 db_channel = settings.get("db_channel_id")
+                
+                series = await database.get_series(series_id)
+                if series and series.get("journey_id"):
+                    journey = await database.get_journey(series["journey_id"])
+                    if journey and journey.get("db_channel_id"):
+                        db_channel = journey["db_channel_id"]
+                        
                 if not db_channel:
                     return await callback.answer("Storage channel not configured.", show_alert=True)
                 files, total_files = await database.list_files(skip=0, limit=500, series_id=series_id, section_id=section_id)
@@ -111,6 +138,13 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         settings = await database.get_settings()
         db_channel = settings.get("db_channel_id")
+        
+        series = await database.get_series(series_id)
+        if series and series.get("journey_id"):
+            journey = await database.get_journey(series["journey_id"])
+            if journey and journey.get("db_channel_id"):
+                db_channel = journey["db_channel_id"]
+                
         if not db_channel:
             return await callback.answer("Storage channel not configured.", show_alert=True)
 
@@ -144,42 +178,65 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if not db_channel:
             return await callback.answer("Storage channel not configured by admin.", show_alert=True)
 
-        if settings.get("lock_buttons_enabled"):
+        series = None
+        journey = None
+        if file_info.get("series_id"):
+            series = await database.get_series(file_info["series_id"])
+            if series and series.get("journey_id"):
+                journey = await database.get_journey(series["journey_id"])
+                
+        if not journey:
+            journey = {
+                "lock_buttons_enabled": False,
+                "lock_active_series_enabled": False,
+                "lock_old_series_enabled": True,
+                "lock_day_based_enabled": False,
+                "lock_time_window": 0,
+                "lock_individual_enabled": False
+            }
+
+        if journey.get("lock_buttons_enabled"):
             is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
             
             if not is_user_premium:
-                parent_series_active = True
-                if file_info.get("series_id"):
-                    series = await database.get_series(file_info["series_id"])
-                    if series and not series.get("is_active", True):
-                        parent_series_active = False
-                
                 is_locked = False
-                if not parent_series_active:
-                    if settings.get("lock_old_series_enabled", True):
-                        return await callback.answer("🔒 This series is restricted to premium users.", show_alert=True)
-                else:
-                    if settings.get("lock_active_series_enabled", False):
-                        if settings.get("lock_day_based_enabled", False):
-                            window = settings.get("lock_time_window", 0)
-                            is_within_window = False
-                            if file_info.get("section_id"):
-                                sec = await database.get_section(file_info["section_id"])
-                                if sec and window > 0 and sec.get("created_at"):
-                                    from datetime import datetime
-                                    age_hours = (datetime.utcnow() - sec["created_at"]).total_seconds() / 3600.0
-                                    if age_hours < window:
-                                        is_within_window = True
+                
+                # Check individual locks
+                if journey.get("lock_individual_enabled", False):
+                    if series and series.get("is_locked", False):
+                        is_locked = True
+                    elif file_info.get("section_id"):
+                        sec = await database.get_section(file_info["section_id"])
+                        if sec and sec.get("is_locked", False):
+                            is_locked = True
                             
-                            if not is_within_window:
-                                is_locked = True
-                        else:
-                            files, total = await database.list_files(skip=0, limit=1000, series_id=file_info.get("series_id"), section_id=file_info.get("section_id"))
-                            if files:
-                                latest_file = max(files, key=lambda f: f["message_id"])
-                                if file_info["file_code"] != latest_file["file_code"]:
+                if not is_locked:
+                    parent_series_active = series.get("is_active", True) if series else True
+                    if not parent_series_active:
+                        if journey.get("lock_old_series_enabled", True):
+                            is_locked = True
+                    else:
+                        if journey.get("lock_active_series_enabled", False):
+                            if journey.get("lock_day_based_enabled", False):
+                                window = journey.get("lock_time_window", 0)
+                                is_within_window = False
+                                if file_info.get("section_id"):
+                                    sec = await database.get_section(file_info["section_id"])
+                                    if sec and window > 0 and sec.get("created_at"):
+                                        from datetime import datetime
+                                        age_hours = (datetime.utcnow() - sec["created_at"]).total_seconds() / 3600.0
+                                        if age_hours < window:
+                                            is_within_window = True
+                                
+                                if not is_within_window:
                                     is_locked = True
-                                    
+                            else:
+                                files, total = await database.list_files(skip=0, limit=1000, series_id=file_info.get("series_id"), section_id=file_info.get("section_id"))
+                                if files:
+                                    latest_file = max(files, key=lambda f: f["message_id"])
+                                    if file_info["file_code"] != latest_file["file_code"]:
+                                        is_locked = True
+                                        
                 if is_locked:
                     return await callback.answer("🔒 You are not a premium user, only premium users can access old files.", show_alert=True)
 
@@ -200,17 +257,14 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         skip = int(data.split("_")[3])
         await callback.answer()
         
-        # Parallel fetch: settings, series list, and premium check all at once
-        settings, series_list, is_user_premium = await asyncio.gather(
+        settings, journeys = await asyncio.gather(
             database.get_settings(),
-            database.list_series(),
-            database.is_premium_user(user_id, OWNER_ID)
+            database.list_journeys()
         )
 
         limit = settings.get("series_buttons_per_page", 5)
         library_msg = settings.get("series_library_custom_msg")
-        
-        header = "🎬 **Browse Categories & Series**\n\nSelect a series to browse episodes:\n\n"
+        header = "🗺️ **Home**\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a category/journey to explore:\n\n"
         if library_msg:
             text = f"{library_msg}\n\n{header}"
         else:
@@ -218,28 +272,84 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             
         buttons = []
         
-
-        sliced_list = series_list[skip:skip+limit]
+        sliced_list = journeys[skip:skip+limit]
         if not sliced_list:
-            text += "_No series available._"
+            text += "_No journeys available._"
         else:
-            for s in sliced_list:
-                text += f"▪️ **{s['title']}**\n"
-                is_series_unlocked = s.get("is_active", True) or is_user_premium
-                if is_series_unlocked:
-                    buttons.append([InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
-                else:
-                    buttons.append([InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_0")])
+            row = []
+            for j in sliced_list:
+                text += f"▪️ **{j['name']}**\n"
+                row.append(InlineKeyboardButton(f"🗺️ View {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
         
         pag_row = []
         if skip > 0:
             pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cl_browse_series_{max(0, skip - limit)}"))
-        if skip + limit < len(series_list):
+        if skip + limit < len(journeys):
             pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_browse_series_{skip + limit}"))
         if pag_row:
             buttons.append(pag_row)
             
         buttons.append([InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")])
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+ 
+    elif data.startswith("cl_journey_"):
+        parts = data.split("_")
+        journey_id = int(parts[2])
+        skip = int(parts[3])
+        await callback.answer()
+        
+        journey, settings, series_list, is_user_premium = await asyncio.gather(
+            database.get_journey(journey_id),
+            database.get_settings(),
+            database.list_series(journey_id=journey_id),
+            database.is_premium_user(user_id, OWNER_ID)
+        )
+        
+        if not journey:
+            return await callback.message.edit_text("❌ Category not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")]]))
+            
+        limit = settings.get("series_buttons_per_page", 5)
+        text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside {journey['name']} to browse series:\n\n"
+        buttons = []
+        
+        sliced_list = series_list[skip:skip+limit]
+        if not sliced_list:
+            text += "_No series available in this category._"
+        else:
+            row = []
+            for s in sliced_list:
+                text += f"▪️ **{s['title']}**\n"
+                is_series_unlocked = s.get("is_active", True) or is_user_premium
+                if journey.get("is_locked", False):
+                    is_series_unlocked = is_user_premium
+                elif journey["lock_buttons_enabled"] and journey["lock_individual_enabled"] and s.get("is_locked", False):
+                    is_series_unlocked = is_user_premium
+                    
+                if is_series_unlocked:
+                    btn = InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                else:
+                    btn = InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                row.append(btn)
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+                    
+        pag_row = []
+        if skip > 0:
+            pag_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cl_journey_{journey_id}_{max(0, skip - limit)}"))
+        if skip + limit < len(series_list):
+            pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_journey_{journey_id}_{skip + limit}"))
+        if pag_row:
+            buttons.append(pag_row)
+            
+        buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data == "cl_welcome_home":
@@ -323,6 +433,13 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 if sec and sec.get("sec_type") == "files":
                     settings = await database.get_settings()
                     db_channel = settings.get("db_channel_id")
+                    
+                    series = await database.get_series(series_id)
+                    if series and series.get("journey_id"):
+                        journey = await database.get_journey(series["journey_id"])
+                        if journey and journey.get("db_channel_id"):
+                            db_channel = journey["db_channel_id"]
+                            
                     if not db_channel:
                         return await callback.answer("Storage channel not configured.", show_alert=True)
                     files, total_files = await database.list_files(skip=0, limit=500, series_id=series_id, section_id=sec_id)

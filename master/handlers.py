@@ -107,6 +107,11 @@ async def cancel_handler(client: Client, message: Message):
     user_id = message.from_user.id
     is_user_admin = await database.is_admin(user_id, OWNER_ID)
     if not is_user_admin:
+        if user_id in ADMIN_STATES:
+            ADMIN_STATES.pop(user_id)
+            await message.reply_text("❌ Action cancelled. State cleared.")
+        else:
+            await message.reply_text("No active action to cancel.")
         return
 
     if user_id in ADMIN_STATES:
@@ -114,6 +119,32 @@ async def cancel_handler(client: Client, message: Message):
         await message.reply_text("❌ Action cancelled. State cleared.", reply_markup=get_main_panel_markup())
     else:
         await message.reply_text("No active action to cancel.", reply_markup=get_main_panel_markup())
+
+async def user_add_bot_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    is_user_admin = await database.is_admin(user_id, OWNER_ID)
+    settings = await database.get_settings()
+    
+    if not is_user_admin:
+        if settings.get("clone_bot_premium_only", False):
+            is_premium = await database.is_premium_user(user_id, OWNER_ID)
+            if not is_premium:
+                return await message.reply_text(
+                    "🔒 **Premium Feature**\n\n"
+                    "Adding clone bots is restricted to premium users.\n"
+                    "Please subscribe to premium to deploy your own clone bot!"
+                )
+                
+    bots = await database.get_clone_bots()
+    if len(bots) >= 2:
+        return await message.reply_text("❌ **Limit Reached**\n\nThe system limit of 2 clone bots has been reached. Please contact admin.")
+        
+    ADMIN_STATES[user_id] = {"state": "waiting_for_clone_token", "message_id": None}
+    await message.reply_text(
+        "🤖 **Register New Clone Bot**\n\n"
+        "Please send your clone bot API Token (obtain from @BotFather):\n\n"
+        "❌ Send `/cancel` to abort."
+    )
 
 async def id_handler(client: Client, message: Message):
     user_id = message.from_user.id

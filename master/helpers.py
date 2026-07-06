@@ -81,7 +81,7 @@ async def get_welcome_markup():
 def get_main_panel_markup():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📂 Storage & File Hub", callback_data="manage_files"),
+            InlineKeyboardButton("📂 Journey & Series Library", callback_data="manage_series"),
             InlineKeyboardButton("👥 User & Subscribers", callback_data="sub_mgr")
         ],
         [

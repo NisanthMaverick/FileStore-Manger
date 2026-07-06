@@ -45,13 +45,12 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     async def _none():
         return None
 
-    # --- Parallel fetch: series + sections + premium status + section info + settings all at once ---
-    series, sections, is_user_premium, current_sec, settings = await asyncio.gather(
+    # --- Parallel fetch: series + sections + premium status + section info ---
+    series, sections, is_user_premium, current_sec = await asyncio.gather(
         database.get_series(series_id),
         database.list_sections(series_id, parent_id=section_id),
         database.is_premium_user(chat_id, OWNER_ID),
-        database.get_section(section_id) if section_id else _none(),
-        database.get_settings()
+        database.get_section(section_id) if section_id else _none()
     )
 
     if not series:
@@ -66,43 +65,65 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                 await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
         return
 
-    # Check if series is inactive (premium lock) and user is not premium
-    if settings.get("lock_buttons_enabled", False) and not series.get("is_active", True):
-        if settings.get("lock_old_series_enabled", True) and not is_user_premium:
-            owner_username = None
+    # Load Journey settings
+    journey = None
+    if series.get("journey_id"):
+        journey = await database.get_journey(series["journey_id"])
+    if not journey:
+        journey = {
+            "lock_buttons_enabled": False,
+            "lock_active_series_enabled": False,
+            "lock_old_series_enabled": True,
+            "lock_day_based_enabled": False,
+            "lock_time_window": 0,
+            "lock_individual_enabled": False
+        }
+
+    # Check if series is locked (premium lock) and user is not premium
+    is_locked_series = False
+    if journey.get("is_locked", False):
+        is_locked_series = True
+    elif journey.get("lock_buttons_enabled", False):
+        if not series.get("is_active", True) and journey.get("lock_old_series_enabled", True):
+            is_locked_series = True
+        elif journey.get("lock_individual_enabled", False) and series.get("is_locked", False):
+            is_locked_series = True
+
+    if is_locked_series and not is_user_premium:
+        owner_username = None
+        try:
+            owner_user = await client.get_users(OWNER_ID)
+            if owner_user and owner_user.username:
+                owner_username = owner_user.username
+        except Exception:
+            pass
+        contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
+        
+        text = (
+            "🔒 **Premium Access Required**\n\n"
+            "You are not a premium user to see old series/content.\n"
+            "Please buy a subscription or contact the administrator if you have any issues."
+        )
+        markup = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
+                InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
+            ],
+            [
+                InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Categories", callback_data=f"cl_journey_{series['journey_id'] or 0}_0")
+            ]
+        ])
+        if is_new_message:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+        else:
             try:
-                owner_user = await client.get_users(OWNER_ID)
-                if owner_user and owner_user.username:
-                    owner_username = owner_user.username
+                await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
             except Exception:
-                pass
-            contact_url = f"https://t.me/{owner_username}" if owner_username else f"tg://user?id={OWNER_ID}"
-            
-            text = (
-                "🔒 **Premium Access Required**\n\n"
-                "You are not a premium user to see old series/content.\n"
-                "Please buy a subscription or contact the administrator if you have any issues."
-            )
-            markup = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("💳 Buy Subscription", url="https://t.me/SubscriptionTamilan_bot?start=plans"),
-                    InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
-                ],
-                [
-                    InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
-                ],
-                [
-                    InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")
-                ]
-            ])
-            if is_new_message:
                 await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-            else:
-                try:
-                    await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
-                except Exception:
-                    await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-            return
+        return
 
     custom_msg = None
     custom_pic = None
@@ -121,23 +142,23 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
     if custom_msg and custom_msg.strip():
         text = custom_msg
     else:
-        path_str = f"🎬 **{series['title']}**"
+        journey_name = journey.get("name", "Main Library") if journey else "Main Library"
+        path_str = f"🗺️ **Home › {journey_name} › {series['title']}**"
         if section_id:
             sec_path = await database.get_section_path(section_id)
-            path_str += f" › {sec_path}"
+            path_str = f"🗺️ **Home › {journey_name} › {series['title']} › {sec_path}**"
 
-        text = f"{path_str}\n"
+        current_name = current_sec["name"] if (section_id and current_sec) else series["title"]
+        text = f"{path_str}\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside to browse {current_name}:\n\n"
         if series.get('description') and not section_id:
-            text += f"_{series['description']}_\n"
-        text += "\n"
+            text += f"_{series['description']}_\n\n"
 
     buttons = []
 
     if sections:
-        is_premium = is_user_premium  # reuse parallel-fetched value
-
-        lock_enabled = settings.get("lock_buttons_enabled", False)
-        window = settings.get("lock_time_window", 0)
+        is_premium = is_user_premium
+        lock_enabled = journey.get("lock_buttons_enabled", False)
+        window = journey.get("lock_time_window", 0)
         latest_file_sec_id = None
         
         file_sections = [sec for sec in sections if sec.get("sec_type") == "files"]
@@ -149,32 +170,48 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
             if s.get("sec_type") == "files":
                 is_unlocked = True
                 if lock_enabled and not is_premium:
-                    parent_series_active = series.get("is_active", True)
-                    if not parent_series_active:
-                        if settings.get("lock_old_series_enabled", True):
-                            is_unlocked = False
+                    if journey.get("lock_individual_enabled", False) and s.get("is_locked", False):
+                        is_unlocked = False
                     else:
-                        if settings.get("lock_active_series_enabled", False):
-                            if settings.get("lock_day_based_enabled", False):
-                                created_at = s.get("created_at")
-                                is_within_window = False
-                                if created_at and window > 0:
-                                    from datetime import datetime
-                                    age_hours = (datetime.utcnow() - created_at).total_seconds() / 3600.0
-                                    if age_hours < window:
-                                        is_within_window = True
-                                if not is_within_window:
-                                    is_unlocked = False
-                            else:
-                                if s["id"] != latest_file_sec_id:
-                                    is_unlocked = False
+                        parent_series_active = series.get("is_active", True)
+                        if journey.get("lock_individual_enabled", False) and series.get("is_locked", False):
+                            is_unlocked = False
+                        elif not parent_series_active:
+                            if journey.get("lock_old_series_enabled", True):
+                                is_unlocked = False
+                        else:
+                            if journey.get("lock_active_series_enabled", False):
+                                if journey.get("lock_day_based_enabled", False):
+                                    created_at = s.get("created_at")
+                                    is_within_window = False
+                                    if created_at and window > 0:
+                                        from datetime import datetime
+                                        age_hours = (datetime.utcnow() - created_at).total_seconds() / 3600.0
+                                        if age_hours < window:
+                                            is_within_window = True
+                                    if not is_within_window:
+                                        is_unlocked = False
+                                else:
+                                    if s["id"] != latest_file_sec_id:
+                                        is_unlocked = False
 
                 if is_unlocked:
                     btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
                 else:
                     btn = InlineKeyboardButton(f"🔒 {s['name']}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
             else:
-                btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"cl_tree_{series_id}_{s['id']}")
+                # Folder section
+                is_unlocked = True
+                if lock_enabled and not is_premium:
+                    if journey.get("lock_individual_enabled", False) and s.get("is_locked", False):
+                        is_unlocked = False
+                    elif journey.get("lock_individual_enabled", False) and series.get("is_locked", False):
+                        is_unlocked = False
+                        
+                if is_unlocked:
+                    btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"cl_tree_{series_id}_{s['id']}")
+                else:
+                    btn = InlineKeyboardButton(f"🔒 {s['name']}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
             
             row.append(btn)
             if len(row) == per_row:
@@ -190,7 +227,7 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         parent_id = current_sec["parent_id"] if current_sec else None
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}")])
     else:
-        buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
+        buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"cl_journey_{series['journey_id'] or 0}_0")])
 
     markup = InlineKeyboardMarkup(buttons)
     if custom_pic:
