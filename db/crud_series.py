@@ -403,8 +403,8 @@ async def list_journeys():
 async def delete_journey(journey_id: int):
     return await asyncio.to_thread(_delete_journey_sync, journey_id)
 
-async def update_journey_settings(journey_id: int, name=None, lock_buttons_enabled=None, lock_active_series_enabled=None, lock_old_series_enabled=None, lock_day_based_enabled=None, lock_time_window=None, lock_individual_enabled=None):
-    return await asyncio.to_thread(_update_journey_settings_sync, journey_id, name, lock_buttons_enabled, lock_active_series_enabled, lock_old_series_enabled, lock_day_based_enabled, lock_time_window, lock_individual_enabled)
+async def update_journey_settings(journey_id: int, name=None, lock_buttons_enabled=None, lock_active_series_enabled=None, lock_old_series_enabled=None, lock_day_based_enabled=None, lock_time_window=None, lock_individual_enabled=None, db_channel_id=None, is_locked=None):
+    return await asyncio.to_thread(_update_journey_settings_sync, journey_id, name, lock_buttons_enabled, lock_active_series_enabled, lock_old_series_enabled, lock_day_based_enabled, lock_time_window, lock_individual_enabled, db_channel_id, is_locked)
 
 async def reset_journey_locks(journey_id: int):
     return await asyncio.to_thread(_reset_journey_locks_sync, journey_id)
