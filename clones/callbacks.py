@@ -21,7 +21,16 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         return
     data = callback.data
 
-    if data.startswith("fsub_ref_"):
+    if data == "cancel_broadcast":
+        from master.states_admin import ACTIVE_BROADCASTS
+        if user_id in ACTIVE_BROADCASTS:
+            ACTIVE_BROADCASTS[user_id] = True
+            await callback.answer("⏳ Cancelling broadcast...", show_alert=True)
+        else:
+            await callback.answer("❌ No active broadcast to cancel.", show_alert=True)
+        return
+
+    elif data.startswith("fsub_ref_"):
         is_subbed, invite_buttons = await check_user_subscribed(client, user_id)
         if not is_subbed:
             return await callback.answer("Yᴏᴜ ᴀʀᴇ ɴᴏᴛ ʏᴇᴛ ᴊᴏɪɴᴇᴅ ᴏᴜʀ ᴄʜᴀɴɴᴇʟ. \nFɪʀsᴛ ᴊᴏɪɴ ᴀɴᴅ ᴛʜᴇɴ ᴘʀᴇss ʀᴇғʀᴇsʜ ʙᴜᴛᴛᴏɴ 🤤", show_alert=True)
