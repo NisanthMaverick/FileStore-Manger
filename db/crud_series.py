@@ -204,7 +204,7 @@ def _get_section_path_sync(section_id: int) -> str:
             sec = session.query(SeriesSection).filter(SeriesSection.id == curr_id).first()
             if not sec:
                 break
-            path_parts.append(sec.name)
+            path_parts.append(sec.name.split('\n')[0])
             curr_id = sec.parent_id
     return " > ".join(reversed(path_parts))
 

@@ -24,7 +24,7 @@ async def copy_files_silently(client: Client, db_channel: str, source_chat_id: i
                     message_id=current_id
                 )
             media = copied_msg.document or copied_msg.video or copied_msg.audio or copied_msg.photo or copied_msg.animation
-            file_name = file_name_prefix or "Text Message"
+            file_name = file_name_prefix.split('\n')[0] if file_name_prefix else "Text Message"
             file_size = 0
             mime_type = "text/plain"
             caption = copied_msg.caption or copied_msg.text or ""
@@ -50,8 +50,17 @@ async def copy_files_silently(client: Client, db_channel: str, source_chat_id: i
             print(f"Silent copy error on message {current_id} from {source_chat_id}: {e}")
 
 async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id: int, source_chat_id: int, start_id: int, end_id: int, series_id: int, section_id: int, redirect_folder_id: int = None, clear_before: bool = True, custom_file_name: str = None):
+    db_channel = None
+    if series_id:
+        series = await database.get_series(series_id)
+        if series and series.get("journey_id"):
+            journey = await database.get_journey(series["journey_id"])
+            if journey and journey.get("db_channel_id"):
+                db_channel = journey["db_channel_id"]
+
     settings = await database.get_settings()
-    db_channel = settings.get("db_channel_id")
+    if not db_channel:
+        db_channel = settings.get("db_channel_id")
     db_delay = settings.get("db_upload_delay", 3)
     if not db_channel:
         try:
@@ -117,7 +126,7 @@ async def run_batch_copy(client: Client, admin_chat_id: int, progress_message_id
                     )
                 
                 media = copied_msg.document or copied_msg.video or copied_msg.audio or copied_msg.photo or copied_msg.animation
-                file_name = custom_file_name or "Text Message"
+                file_name = custom_file_name.split('\n')[0] if custom_file_name else "Text Message"
                 file_size = 0
                 mime_type = "text/plain"
                 caption = copied_msg.caption or copied_msg.text or ""
@@ -179,8 +188,17 @@ async def run_multi_range_copy(
     custom_file_name: str = None,
     library_skip: int = 0
 ):
+    db_channel = None
+    if series_id:
+        series = await database.get_series(series_id)
+        if series and series.get("journey_id"):
+            journey = await database.get_journey(series["journey_id"])
+            if journey and journey.get("db_channel_id"):
+                db_channel = journey["db_channel_id"]
+
     settings = await database.get_settings()
-    db_channel = settings.get("db_channel_id")
+    if not db_channel:
+        db_channel = settings.get("db_channel_id")
     db_delay = settings.get("db_upload_delay", 3)
     if not db_channel:
         try:
@@ -258,7 +276,7 @@ async def run_multi_range_copy(
                         )
                     
                     media = copied_msg.document or copied_msg.video or copied_msg.audio or copied_msg.photo or copied_msg.animation
-                    file_name = custom_file_name or "Text Message"
+                    file_name = custom_file_name.split('\n')[0] if custom_file_name else "Text Message"
                     file_size = 0
                     mime_type = "text/plain"
                     caption = copied_msg.caption or copied_msg.text or ""

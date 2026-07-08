@@ -5,6 +5,34 @@ import database
 from .helpers import ACTIVE_CLONES
 from config import API_ID, API_HASH
 
+def to_small_text(text: str) -> str:
+    superscript_map = {
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 
+        'i': 'ⁱ', 'j': 'ʲ', 'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 
+        'q': '𐞎', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 
+        'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 
+        'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 
+        'Q': '𐞎', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 
+        'Y': 'ʸ', 'Z': 'ᶻ',
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', 
+        '8': '⁸', '9': '⁹',
+        '-': '⁻', '+': '⁺', '=': '⁼', '(': '⁽', ')': '⁾'
+    }
+    return "".join(superscript_map.get(c, c) for c in text)
+
+def format_sec_name_btn(name: str) -> str:
+    parts = name.split('\n', 1)
+    if len(parts) == 1:
+        for emoji in ['📅', '🗓️', '🗓', '📆']:
+            if emoji in name:
+                p = name.split(emoji, 1)
+                parts = [p[0].strip(), f"{emoji}{p[1]}"]
+                break
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]}\n{to_small_text(parts[1])}"
+    return name
+
 # Dynamic starting of Clone Bots
 async def start_clone_bot(token: str) -> bool:
     if token in ACTIVE_CLONES:
@@ -148,7 +176,7 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
             sec_path = await database.get_section_path(section_id)
             path_str = f"🗺️ **Home › {journey_name} › {series['title']} › {sec_path}**"
 
-        current_name = current_sec["name"] if (section_id and current_sec) else series["title"]
+        current_name = current_sec["name"].split('\n')[0] if (section_id and current_sec) else series["title"]
         text = f"{path_str}\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside to browse {current_name}:\n\n"
         if series.get('description') and not section_id:
             text += f"_{series['description']}_\n\n"
@@ -195,10 +223,11 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                                     if s["id"] != latest_file_sec_id:
                                         is_unlocked = False
 
+                formatted_name = format_sec_name_btn(s['name'])
                 if is_unlocked:
-                    btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"📥 {formatted_name}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
                 else:
-                    btn = InlineKeyboardButton(f"🔒 {s['name']}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
             else:
                 # Folder section
                 is_unlocked = True
@@ -208,10 +237,11 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                     elif journey.get("lock_individual_enabled", False) and series.get("is_locked", False):
                         is_unlocked = False
                         
+                formatted_name = format_sec_name_btn(s['name'])
                 if is_unlocked:
-                    btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"cl_tree_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"📁 {formatted_name}", callback_data=f"cl_tree_{series_id}_{s['id']}")
                 else:
-                    btn = InlineKeyboardButton(f"🔒 {s['name']}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
             
             row.append(btn)
             if len(row) == per_row:

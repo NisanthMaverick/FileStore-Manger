@@ -16,7 +16,7 @@ async def main():
         api_id=API_ID,
         api_hash=API_HASH,
         bot_token=MAIN_BOT_TOKEN,
-        in_memory=True
+        in_memory=False
     )
     register_main_bot_handlers(main_bot)
     await main_bot.start()

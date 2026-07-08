@@ -7,6 +7,34 @@ from .helpers import (
 )
 from .ui_files import show_folder_management, show_series_browse, show_manage_series
 
+def to_small_text(text: str) -> str:
+    superscript_map = {
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 
+        'i': 'ⁱ', 'j': 'ʲ', 'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 
+        'q': '𐞎', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 
+        'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 
+        'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 
+        'Q': '𐞎', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 
+        'Y': 'ʸ', 'Z': 'ᶻ',
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', 
+        '8': '⁸', '9': '⁹',
+        '-': '⁻', '+': '⁺', '=': '⁼', '(': '⁽', ')': '⁾'
+    }
+    return "".join(superscript_map.get(c, c) for c in text)
+
+def format_sec_name_inline(name: str) -> str:
+    parts = name.split('\n', 1)
+    if len(parts) == 1:
+        for emoji in ['📅', '🗓️', '🗓', '📆']:
+            if emoji in name:
+                p = name.split(emoji, 1)
+                parts = [p[0].strip(), f"{emoji}{p[1]}"]
+                break
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]} - {to_small_text(parts[1])}"
+    return name
+
 async def handle_files_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
@@ -276,10 +304,16 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
 
     # 4. Waiting for Tree Folder Name
     elif state == "waiting_for_tree_folder_name":
-        name = message.text.strip()
-        if not name:
+        raw_text = message.text.strip()
+        if not raw_text:
             await message.reply_text("⚠️ Folder name cannot be empty. Try again or send /cancel.")
             return True
+        
+        parts = [p.strip() for p in raw_text.split(',', 1)]
+        if len(parts) > 1 and parts[1]:
+            name = f"{parts[0]}\n{parts[1]}"
+        else:
+            name = parts[0]
         
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
@@ -301,10 +335,16 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
 
     # 5. Waiting for Tree File Button Name
     elif state == "waiting_for_tree_file_btn_name":
-        name = message.text.strip()
-        if not name:
+        raw_text = message.text.strip()
+        if not raw_text:
             await message.reply_text("⚠️ Button/File name cannot be empty. Try again or send /cancel.")
             return True
+
+        parts = [p.strip() for p in raw_text.split(',', 1)]
+        if len(parts) > 1 and parts[1]:
+            name = f"{parts[0]}\n{parts[1]}"
+        else:
+            name = parts[0]
 
         series_id = state_data["data"]["series_id"]
         parent_folder_id = state_data["data"]["parent_folder_id"]
@@ -345,25 +385,54 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
 
     # 6. Waiting for Rename Folder / Section Name
     elif state == "waiting_for_rename_sec":
-        new_name = message.text.strip()
+        raw_text = message.text.strip()
+        parts = [p.strip() for p in raw_text.split(',')]
+        if len(parts) >= 3:
+            new_name = f"{parts[0]} ({parts[1]})\n[{parts[2]}]"
+        elif len(parts) == 2:
+            new_name = f"{parts[0]}\n{parts[1]}"
+        else:
+            split_done = False
+            for emoji in ['📅', '🗓️', '🗓', '📆']:
+                if emoji in raw_text:
+                    p = raw_text.split(emoji, 1)
+                    new_name = f"{p[0].strip()}\n{emoji}{p[1]}"
+                    split_done = True
+                    break
+            if not split_done:
+                new_name = raw_text
         series_id = state_data["data"]["series_id"]
         section_id = state_data["data"]["section_id"]
         library_skip = state_data["data"].get("library_skip", 0)
         orig_msg_id = state_data.get("message_id")
         
+        # Fetch section type before rename to know where to redirect
+        sec = await database.get_section(section_id)
+        is_files = sec and sec.get("sec_type") == "files"
+        
         updated = await database.update_section(section_id, new_name)
         ADMIN_STATES.pop(user_id, None)
         
+        if updated and sec:
+            sec["name"] = new_name
+        
         if updated:
             if orig_msg_id:
-                await show_folder_management(client, message.chat.id, orig_msg_id, series_id, section_id, library_skip=library_skip)
+                if is_files:
+                    from .ui_files import show_filesec_actions
+                    _, total_files = await database.list_files(skip=0, limit=1, series_id=series_id, section_id=section_id)
+                    await show_filesec_actions(client, message.chat.id, orig_msg_id, series_id, section_id, sec, total_files, library_skip=library_skip)
+                else:
+                    await show_folder_management(client, message.chat.id, orig_msg_id, series_id, section_id, library_skip=library_skip)
             else:
-                await message.reply_text(f"✅ Renamed successfully to **{new_name}**!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
+                back_cb = f"filesec_act_{series_id}_{section_id}_{library_skip}" if is_files else f"manage_folder_opt_{series_id}_{section_id}_{library_skip}"
+                await message.reply_text(f"✅ Renamed successfully to **{format_sec_name_inline(new_name)}**!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_cb)]]))
         else:
+            back_cb = f"filesec_act_{series_id}_{section_id}_{library_skip}" if is_files else f"manage_folder_opt_{series_id}_{section_id}_{library_skip}"
             if orig_msg_id:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text="❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
+                await client.edit_message_text(chat_id=message.chat.id, message_id=orig_msg_id, text="❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_cb)]]))
             else:
-                await message.reply_text("❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]]))
+                await message.reply_text("❌ Failed to rename section.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_cb)]]))
         return True
 
     # 7. Waiting for Folder Custom Message

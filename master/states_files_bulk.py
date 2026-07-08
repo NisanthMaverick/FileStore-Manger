@@ -37,8 +37,18 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
 
         series_id = state_data["data"]["series_id"]
         section_id = state_data["data"]["section_id"]
+        db_channel = None
+        if series_id:
+            series = await database.get_series(series_id)
+            if series and series.get("journey_id"):
+                journey = await database.get_journey(series["journey_id"])
+                if journey and journey.get("db_channel_id"):
+                    db_channel = journey["db_channel_id"]
+
         settings = await database.get_settings()
-        db_channel = settings.get("db_channel_id")
+        if not db_channel:
+            db_channel = settings.get("db_channel_id")
+
         if not db_channel:
             if message_id:
                 await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text="❌ DB Storage Channel is not configured.")
@@ -61,73 +71,134 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 merged_lines.append(line)
         processed_text = "\n".join(merged_lines)
 
-        # Replace newlines with commas so we support both newline and comma separation
-        bulk_text_commas = processed_text.replace('\n', ',')
-        raw_items = [item.strip().rstrip(',. ') for item in bulk_text_commas.split(',') if item.strip()]
-        
         parsed_entries = []
-        for item in raw_items:
-            if not item:
+        for line in merged_lines:
+            line = line.strip()
+            if not line:
                 continue
-            if item.startswith('"') and item.endswith('"'):
-                folder_name = item[1:-1].strip()
-                if folder_name:
-                    parsed_entries.append({"type": "folder", "name": folder_name})
-            else:
-                sub_parts = [part.strip() for part in item.split('+') if part.strip()]
+            
+            # Check if this line has any telegram links
+            line_words = line.split()
+            has_link = any(is_telegram_link(clean_link_token(w)) for w in line_words)
+            
+            if has_link:
+                # Treat the entire line as a single file entry
+                # Split by the first comma to separate button name and description+links
+                if ',' in line:
+                    parts = [part.strip() for part in line.split(',')]
+                    if len(parts) >= 3:
+                        button_name = f"{parts[0]} ({parts[1]})"
+                        desc_and_links = ",".join(parts[2:])
+                        is_three_parts = True
+                    else:
+                        button_name = parts[0]
+                        desc_and_links = parts[1]
+                        is_three_parts = False
+                else:
+                    is_three_parts = False
+                    split_done = False
+                    for emoji in ['📅', '🗓️', '🗓', '📆']:
+                        if emoji in line:
+                            p = line.split(emoji, 1)
+                            button_name = p[0].strip()
+                            desc_and_links = f"{emoji}{p[1]}"
+                            split_done = True
+                            break
+                    if not split_done:
+                        button_name = ""
+                        desc_and_links = line
+                
+                sub_parts = [sp.strip() for sp in desc_and_links.split('+') if sp.strip()]
                 if not sub_parts:
                     continue
                 
                 first_part = sub_parts[0]
                 first_words = first_part.split()
-                if len(first_words) >= 2:
+                if len(first_words) >= 1:
                     last_word = clean_link_token(first_words[-1])
-                    sec_last_word = clean_link_token(first_words[-2])
+                    sec_last_word = clean_link_token(first_words[-2]) if len(first_words) >= 2 else None
                     
                     if is_telegram_link(last_word):
-                        if is_telegram_link(sec_last_word):
+                        if sec_last_word and is_telegram_link(sec_last_word):
                             end_link = last_word
                             start_link = sec_last_word
-                            button_name = " ".join(first_words[:-2]).strip()
+                            desc_part = " ".join(first_words[:-2]).strip()
                         else:
                             end_link = last_word
                             start_link = last_word
-                            button_name = " ".join(first_words[:-1]).strip()
+                            desc_part = " ".join(first_words[:-1]).strip()
                             
                         ranges = [{"start_link": start_link, "end_link": end_link}]
                         
+                        if not button_name:
+                            button_name = desc_part
+                            description = ""
+                        else:
+                            if is_three_parts:
+                                description = f"[{desc_part}]"
+                            else:
+                                description = desc_part
+                        
                         valid = True
-                        for part in sub_parts[1:]:
-                            part_words = [clean_link_token(w) for w in part.split() if w]
-                            if not part_words:
+                        for spart in sub_parts[1:]:
+                            spart_words = [clean_link_token(w) for w in spart.split() if w]
+                            if not spart_words:
                                 continue
-                            if len(part_words) >= 2 and is_telegram_link(part_words[-1]) and is_telegram_link(part_words[-2]):
+                            if len(spart_words) >= 2 and is_telegram_link(spart_words[-1]) and is_telegram_link(spart_words[-2]):
                                 ranges.append({
-                                    "start_link": part_words[-2],
-                                    "end_link": part_words[-1]
+                                    "start_link": spart_words[-2],
+                                    "end_link": spart_words[-1]
                                 })
-                            elif len(part_words) >= 1 and is_telegram_link(part_words[-1]):
+                            elif len(spart_words) >= 1 and is_telegram_link(spart_words[-1]):
                                 ranges.append({
-                                    "start_link": part_words[-1],
-                                    "end_link": part_words[-1]
+                                    "start_link": spart_words[-1],
+                                    "end_link": spart_words[-1]
                                 })
                             else:
                                 valid = False
                                 break
                         
                         if valid:
+                            full_name = f"{button_name}\n{description}" if description else button_name
                             parsed_entries.append({
                                 "type": "file",
-                                "name": button_name,
+                                "name": full_name,
                                 "ranges": ranges
                             })
+            else:
+                # No link, so it must be a folder list
+                # Split by commas outside double quotes
+                parts = [p.strip() for p in re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line) if p.strip()]
+                for part in parts:
+                    if part.startswith('"') and part.endswith('"'):
+                        folder_name = part[1:-1].strip()
+                        if folder_name:
+                            split_done = False
+                            for emoji in ['📅', '🗓️', '🗓', '📆']:
+                                if emoji in folder_name:
+                                    p = folder_name.split(emoji, 1)
+                                    folder_name = f"{p[0].strip()}\n{emoji}{p[1]}"
+                                    split_done = True
+                                    break
+                            parsed_entries.append({"type": "folder", "name": folder_name})
+                    else:
+                        folder_name = part.strip()
+                        if folder_name:
+                            split_done = False
+                            for emoji in ['📅', '🗓️', '🗓', '📆']:
+                                if emoji in folder_name:
+                                    p = folder_name.split(emoji, 1)
+                                    folder_name = f"{p[0].strip()}\n{emoji}{p[1]}"
+                                    split_done = True
+                                    break
+                            parsed_entries.append({"type": "folder", "name": folder_name})
 
         if not parsed_entries:
             await message.reply_text(
                 "⚠️ **No valid entries found.**\n\n"
-                "Please enter items separated by commas or newlines:\n"
+                "Please enter items separated by newlines:\n"
                 "📁 Folder: `\"Folder Name\"`\n"
-                "📥 File: `Button Name startLink endLink`\n\n"
+                "📥 File: `Button Name, Description startLink endLink`\n\n"
                 "Try again or send `/cancel`."
             )
             return True

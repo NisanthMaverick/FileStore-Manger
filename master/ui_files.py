@@ -3,6 +3,46 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 import database
 from .helpers import get_back_button
 
+def to_small_text(text: str) -> str:
+    superscript_map = {
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 
+        'i': 'ⁱ', 'j': 'ʲ', 'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 
+        'q': '𐞎', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 
+        'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 
+        'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 
+        'Q': '𐞎', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 
+        'Y': 'ʸ', 'Z': 'ᶻ',
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', 
+        '8': '⁸', '9': '⁹',
+        '-': '⁻', '+': '⁺', '=': '⁼', '(': '⁽', ')': '⁾'
+    }
+    return "".join(superscript_map.get(c, c) for c in text)
+
+def format_sec_name_inline(name: str) -> str:
+    parts = name.split('\n', 1)
+    if len(parts) == 1:
+        for emoji in ['📅', '🗓️', '🗓', '📆']:
+            if emoji in name:
+                p = name.split(emoji, 1)
+                parts = [p[0].strip(), f"{emoji}{p[1]}"]
+                break
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]} - {to_small_text(parts[1])}"
+    return name
+
+def format_sec_name_btn(name: str) -> str:
+    parts = name.split('\n', 1)
+    if len(parts) == 1:
+        for emoji in ['📅', '🗓️', '🗓', '📆']:
+            if emoji in name:
+                p = name.split(emoji, 1)
+                parts = [p[0].strip(), f"{emoji}{p[1]}"]
+                break
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]}\n{to_small_text(parts[1])}"
+    return name
+
 async def show_folder_management(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = 0, library_skip: int = 0):
     series = await database.get_series(series_id)
     if not series:
@@ -36,7 +76,7 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         custom_pic = series.get("custom_pic")
         type_str = "Series (Root)"
     else:
-        name = current_sec["name"]
+        name = format_sec_name_inline(current_sec["name"])
         custom_msg = current_sec.get("custom_msg")
         buttons_per_row = current_sec.get("buttons_per_row", 2)
         custom_pic = current_sec.get("custom_pic")
@@ -146,10 +186,11 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
     if sections:
         row = []
         for s in sections:
+            formatted_name = format_sec_name_btn(s['name'])
             if s.get("sec_type") == "files":
-                btn = InlineKeyboardButton(f"📥 {s['name']}", callback_data=f"filesec_act_{series_id}_{s['id']}_{library_skip}")
+                btn = InlineKeyboardButton(f"📥 {formatted_name}", callback_data=f"filesec_act_{series_id}_{s['id']}_{library_skip}")
             else:
-                btn = InlineKeyboardButton(f"📁 {s['name']}", callback_data=f"browse_sec_{series_id}_{s['id']}_{library_skip}")
+                btn = InlineKeyboardButton(f"📁 {formatted_name}", callback_data=f"browse_sec_{series_id}_{s['id']}_{library_skip}")
             row.append(btn)
             if len(row) == per_row:
                 buttons.append(row)
@@ -577,15 +618,15 @@ async def show_manage_files(client: Client, chat_id: int, message_id: int):
 
 async def show_filesec_actions(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, sec: dict, total_files: int, library_skip: int = 0):
     parent_id = sec["parent_id"]
-    text = f"📥 **{sec['name']}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
+    text = f"📥 **{format_sec_name_inline(sec['name'])}**\n\n📂 Contains **{total_files} file(s)**\n\nChoose an action:"
     markup = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("➕ Add More Files", callback_data=f"filesec_add_{series_id}_{section_id}"),
-            InlineKeyboardButton("🔄 Replace All Files", callback_data=f"filesec_replace_{series_id}_{section_id}")
+            InlineKeyboardButton("➕ Add More Files", callback_data=f"filesec_add_{series_id}_{section_id}_{library_skip}"),
+            InlineKeyboardButton("🔄 Replace All Files", callback_data=f"filesec_replace_{series_id}_{section_id}_{library_skip}")
         ],
         [
-            InlineKeyboardButton("✏️ Rename Button", callback_data=f"rename_sec_{series_id}_{section_id}"),
-            InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}")
+            InlineKeyboardButton("✏️ Rename Button", callback_data=f"rename_sec_{series_id}_{section_id}_{library_skip}"),
+            InlineKeyboardButton("🗑 Delete Button", callback_data=f"tree_del_sec_{series_id}_{section_id}_{library_skip}")
         ],
         [
             InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}_{library_skip}")
@@ -626,8 +667,8 @@ async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, s
     valid_folders = [f for f in all_folders if f["id"] not in descendants]
     
     text = (
-        f"📂 **Move Folder: {folder_to_move['name']}**\n\n"
-        f"Choose a new parent folder for **{folder_to_move['name']}** from the list below.\n"
+        f"📂 **Move Folder: {format_sec_name_inline(folder_to_move['name'])}**\n\n"
+        f"Choose a new parent folder for **{format_sec_name_inline(folder_to_move['name'])}** from the list below.\n"
         "Select **Root (Top-Level)** to move it to the series root."
     )
     
@@ -646,7 +687,7 @@ async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, s
     for f in page_folders:
         prefix = "👉 " if f["id"] == folder_to_move["parent_id"] else "📁 "
         buttons.append([
-            InlineKeyboardButton(f"{prefix}{f['name']}", callback_data=f"move_folder_execute_{series_id}_{section_id}_{f['id']}_{library_skip}")
+            InlineKeyboardButton(f"{prefix}{format_sec_name_btn(f['name'])}", callback_data=f"move_folder_execute_{series_id}_{section_id}_{f['id']}_{library_skip}")
         ])
         
     # Pagination

@@ -13,6 +13,34 @@ from .ui_files import (
 )
 from .ui_config import show_auto_delete_menu
 
+def to_small_text(text: str) -> str:
+    superscript_map = {
+        'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 
+        'i': 'ⁱ', 'j': 'ʲ', 'k': 'ᵏ', 'l': 'ˡ', 'm': 'ᵐ', 'n': 'ⁿ', 'o': 'ᵒ', 'p': 'ᵖ', 
+        'q': '𐞎', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'x': 'ˣ', 
+        'y': 'ʸ', 'z': 'ᶻ',
+        'A': 'ᴬ', 'B': 'ᴮ', 'C': 'ᶜ', 'D': 'ᴰ', 'E': 'ᴱ', 'F': 'ᶠ', 'G': 'ᴳ', 'H': 'ᴴ', 
+        'I': 'ᴵ', 'J': 'ᴶ', 'K': 'ᴷ', 'L': 'ᴸ', 'M': 'ᴹ', 'N': 'ᴺ', 'O': 'ᴼ', 'P': 'ᴾ', 
+        'Q': '𐞎', 'R': 'ᴿ', 'S': 'ˢ', 'T': 'ᵀ', 'U': 'ᵁ', 'V': 'ⱽ', 'W': 'ᵂ', 'X': 'ˣ', 
+        'Y': 'ʸ', 'Z': 'ᶻ',
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', 
+        '8': '⁸', '9': '⁹',
+        '-': '⁻', '+': '⁺', '=': '⁼', '(': '⁽', ')': '⁾'
+    }
+    return "".join(superscript_map.get(c, c) for c in text)
+
+def format_sec_name_inline(name: str) -> str:
+    parts = name.split('\n', 1)
+    if len(parts) == 1:
+        for emoji in ['📅', '🗓️', '🗓', '📆']:
+            if emoji in name:
+                p = name.split(emoji, 1)
+                parts = [p[0].strip(), f"{emoji}{p[1]}"]
+                break
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]} - {to_small_text(parts[1])}"
+    return name
+
 async def handle_series_callbacks(client: Client, callback: CallbackQuery, data: str) -> bool:
     user_id = callback.from_user.id
 
@@ -26,7 +54,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parent_id = sec["parent_id"] if sec else None
         ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
         await callback.message.edit_text(
-            f"📥 **{sec['name'] if sec else 'Files'}** — Import Files\n\n"
+            f"📥 **{format_sec_name_inline(sec['name']) if sec else 'Files'}** — Import Files\n\n"
             "Please **forward a message** or send the **Telegram message link(s)** to import files.\n\n"
             "**Format Guidelines:**\n"
             "• **Single Link:** Paste a single link:\n"
@@ -51,7 +79,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             return await callback.message.edit_text("Folder not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_0_{library_skip}")]]))
         ADMIN_STATES[user_id] = {"state": "waiting_for_rename_sec", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
-            f"✏️ **Rename Folder: {sec['name']}**\n\nPlease enter the **New Folder Name / Heading**:\n\n❌ Send `/cancel` to abort.",
+            f"✏️ **Rename Folder: {format_sec_name_inline(sec['name'])}**\n\nPlease enter the **New Folder Name / Heading** and optional **Description** (separated by a comma `,`):\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"browse_sec_{series_id}_{section_id}_{library_skip}")]])
         )
         return True
@@ -200,7 +228,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         if not sec:
             return await callback.answer("Folder not found.")
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("⚠️ Yes, Delete Folder", callback_data=f"confirm_del_sec_{series_id}_{section_id}_{library_skip}"), InlineKeyboardButton("❌ Cancel", callback_data=f"manage_folder_opt_{series_id}_{section_id}_{library_skip}")]])
-        await callback.message.edit_text(f"⚠️ **Confirm Delete Folder**\n\nAre you sure you want to delete **{sec['name']}**? This action is permanent!", reply_markup=markup)
+        await callback.message.edit_text(f"⚠️ **Confirm Delete Folder**\n\nAre you sure you want to delete **{format_sec_name_inline(sec['name'])}**? This action is permanent!", reply_markup=markup)
         return True
 
     elif data.startswith("confirm_del_sec_"):
@@ -267,11 +295,13 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         ADMIN_STATES[user_id] = {"state": "waiting_for_bulk_add", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
             "📦 **Bulk Add Files & Folders**\n\n"
-            "Paste your entries (separated by newlines or commas):\n\n"
+            "Paste your entries (separated by newlines):\n\n"
             "📁 Folder: `\"Folder Name\"`\n"
-            "📥 File/Button: `Button Name startLink endLink`\n\n"
+            "📥 File/Button: `Button Name, Description startLink endLink`\n\n"
             "💡 **Example:**\n"
-            "`\"Season 1\", Episode 01 startLink endLink, Episode 02 startLink endLink`\n\n"
+            "`\"Season 1\"`\n"
+            "`Episode 01, Added today startLink endLink`\n"
+            "`Episode 02 startLink endLink`\n\n"
             "❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
@@ -309,7 +339,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parent_id = sec["parent_id"] if sec else None
         ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": False, "library_skip": library_skip}}
         await callback.message.edit_text(
-            f"➕ **Add More Files to: {sec['name'] if sec else 'Button'}**\n\n"
+            f"➕ **Add More Files to: {format_sec_name_inline(sec['name']) if sec else 'Button'}**\n\n"
             "Please **forward a message** or send the **Telegram message link(s)** to append files.\n\n"
             "**Format Guidelines:**\n"
             "• **Single Link:** Paste a single link:\n"
@@ -332,7 +362,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         parent_id = sec["parent_id"] if sec else None
         ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_links", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "parent_folder_id": parent_id, "clear_before": True, "library_skip": library_skip}}
         await callback.message.edit_text(
-            f"🔄 **Replace All Files in: {sec['name'] if sec else 'Button'}**\n\n"
+            f"🔄 **Replace All Files in: {format_sec_name_inline(sec['name']) if sec else 'Button'}**\n\n"
             "⚠️ **WARNING:** This will delete existing files in this button!\n\n"
             "Please **forward a message** or send the new **Telegram message link(s)**:\n\n"
             "**Format Guidelines:**\n"
@@ -354,7 +384,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.answer()
         ADMIN_STATES[user_id] = {"state": "waiting_for_tree_folder_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
-            "📁 **Create Folder**\n\nPlease enter the **Folder Name**:\n\n❌ Send `/cancel` to abort.",
+            "📁 **Create Folder**\n\nPlease enter the **Folder Name** and optional **Description** (separated by a comma `,`):\n\nExample: `Season 1, 📅 Released in 2024`\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
@@ -367,7 +397,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         await callback.answer()
         ADMIN_STATES[user_id] = {"state": "waiting_for_tree_file_btn_name", "message_id": callback.message.id, "data": {"series_id": series_id, "parent_folder_id": section_id, "library_skip": library_skip}}
         await callback.message.edit_text(
-            "📄 **Add File Button**\n\nPlease enter the **Button / File Name**:\n\n❌ Send `/cancel` to abort.",
+            "📄 **Add File Button**\n\nPlease enter the **Button / File Name** and optional **Description** (separated by a comma `,`):\n\nExample: `Ep (01 - 10), 📅 Added on 07 Jul 2025`\n\n❌ Send `/cancel` to abort.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
