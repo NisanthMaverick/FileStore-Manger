@@ -12,6 +12,8 @@ from .helpers import (
 from .ui_config import show_auto_delete_menu
 from .ui_admin import show_db_sync, show_mgr_admins, show_lock_settings
 
+ACTIVE_BROADCASTS = {}
+
 async def handle_admin_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
@@ -87,37 +89,148 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
                 await message.reply_text(report_text, reply_markup=markup)
             return True
 
+        # Copy the message to the DB Storage Channel if configured, so clone bots can access/copy it.
+        settings = await database.get_settings()
+        db_channel = settings.get("db_channel_id")
+        has_clones = target_type in ["all_clones", "specific_clone"]
+        
+        if has_clones and not db_channel:
+            report_text = "❌ **Broadcast Failed**: DB Storage Channel is not configured. Clone bots require a storage channel to copy/broadcast messages."
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
+            if message_id:
+                try:
+                    await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=report_text, reply_markup=markup)
+                except Exception:
+                    await message.reply_text(report_text, reply_markup=markup)
+            else:
+                await message.reply_text(report_text, reply_markup=markup)
+            return True
+
+        temp_msg_id = None
+        source_chat_id = message.chat.id
+        source_msg_id = message.id
+        
+        if db_channel:
+            try:
+                dest_chat = int(db_channel) if str(db_channel).startswith("-100") or str(db_channel).isdigit() else db_channel
+                temp_msg = await client.copy_message(chat_id=dest_chat, from_chat_id=message.chat.id, message_id=message.id)
+                temp_msg_id = temp_msg.id
+                source_chat_id = dest_chat
+                source_msg_id = temp_msg_id
+            except Exception as e:
+                if has_clones:
+                    report_text = f"❌ **Broadcast Failed**: Could not copy message to DB Storage Channel: {e}"
+                    markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
+                    if message_id:
+                        try:
+                            await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=report_text, reply_markup=markup)
+                        except Exception:
+                            await message.reply_text(report_text, reply_markup=markup)
+                    else:
+                        await message.reply_text(report_text, reply_markup=markup)
+                    return True
+
         # Perform the broadcast
+        import time
+        ACTIVE_BROADCASTS[user_id] = False
+        last_update_time = time.time()
+        
+        total_users = len(users)
+        total_bots = len(clients_to_broadcast)
+        total_expected = total_users * total_bots
+        
+        overall_sent = 0
+        overall_success = 0
+        overall_failed = 0
         detail_results = []
+        cancelled = False
+
         for name, bot_client in clients_to_broadcast:
             bot_success = 0
             bot_failed = 0
-            for u in users:
+            for idx, u in enumerate(users, 1):
+                if ACTIVE_BROADCASTS.get(user_id, False):
+                    cancelled = True
+                    break
+                
+                target_user_id = u["user_id"]
+                user_display = f"@{u['username']}" if u.get("username") else f"`{target_user_id}`"
+                
+                # Periodically update progress message (every 2 seconds)
+                now = time.time()
+                if now - last_update_time >= 2.0:
+                    last_update_time = now
+                    remaining = total_expected - overall_sent
+                    progress_text = (
+                        f"📢 **Broadcasting Message...**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"🤖 **Current Bot:** {name}\n"
+                        f"👤 **Sending to:** {user_display}\n"
+                        f"📊 **Overall Progress:** {overall_sent}/{total_expected} messages\n"
+                        f"⏳ **Total Remaining:** {remaining}\n\n"
+                        f"✅ **Total Success:** {overall_success} | ❌ **Total Failed:** {overall_failed}\n"
+                        f"• **Current Bot Success:** {bot_success} | ❌ {bot_failed}\n\n"
+                        f"⚠️ _Updating live..._"
+                    )
+                    markup = InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Cancel Broadcast", callback_data="cancel_broadcast")]])
+                    if message_id:
+                        try:
+                            await client.edit_message_text(chat_id=message.chat.id, message_id=message_id, text=progress_text, reply_markup=markup)
+                        except Exception:
+                            pass
+                
                 try:
-                    await bot_client.copy_message(chat_id=u["user_id"], from_chat_id=message.chat.id, message_id=message.id)
+                    await bot_client.copy_message(chat_id=target_user_id, from_chat_id=source_chat_id, message_id=source_msg_id)
                     bot_success += 1
-                    await asyncio.sleep(0.05)
+                    overall_success += 1
                 except FloodWait as fw:
                     await asyncio.sleep(fw.value)
                     try:
-                        await bot_client.copy_message(chat_id=u["user_id"], from_chat_id=message.chat.id, message_id=message.id)
+                        await bot_client.copy_message(chat_id=target_user_id, from_chat_id=source_chat_id, message_id=source_msg_id)
                         bot_success += 1
+                        overall_success += 1
                     except Exception:
                         bot_failed += 1
+                        overall_failed += 1
                 except Exception:
                     bot_failed += 1
-            success += bot_success
-            failed += bot_failed
+                    overall_failed += 1
+                
+                overall_sent += 1
+                await asyncio.sleep(0.05)
+                
             detail_results.append(f"• **{name}:** ✅ {bot_success} | ❌ {bot_failed}")
-
-        detail_str = "\n".join(detail_results)
-        report_text = (
-            f"📢 **Broadcast Completed**\n━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{detail_str}\n\n"
-            f"📊 **Total Success:** {success}\n"
-            f"❌ **Total Failed:** {failed}"
-        )
+            if cancelled:
+                break
+                
+        # Clean up cancel flag
+        ACTIVE_BROADCASTS.pop(user_id, None)
         
+        # Clean up temporary message in DB channel
+        if temp_msg_id and db_channel:
+            try:
+                dest_chat = int(db_channel) if str(db_channel).startswith("-100") or str(db_channel).isdigit() else db_channel
+                await client.delete_messages(chat_id=dest_chat, message_ids=[temp_msg_id])
+            except Exception as e:
+                print(f"Failed to delete temp broadcast message: {e}")
+
+        if cancelled:
+            report_text = (
+                f"🛑 **Broadcast Cancelled by Admin**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📊 **Messages Processed:** {overall_sent}/{total_expected}\n"
+                f"✅ **Total Success:** {overall_success}\n"
+                f"❌ **Total Failed:** {overall_failed}"
+            )
+        else:
+            detail_str = "\n".join(detail_results)
+            report_text = (
+                f"📢 **Broadcast Completed**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{detail_str}\n\n"
+                f"📊 **Total Success:** {overall_success}\n"
+                f"❌ **Total Failed:** {overall_failed}"
+            )
+            
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Users", callback_data="sub_mgr")]])
         if message_id:
             try:

@@ -145,6 +145,15 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
         await show_remove_subscriber_menu(client, callback.message.chat.id, callback.message.id, skip=skip)
         return True
 
+    elif data == "cancel_broadcast":
+        from .states_admin import ACTIVE_BROADCASTS
+        if user_id in ACTIVE_BROADCASTS:
+            ACTIVE_BROADCASTS[user_id] = True
+            await callback.answer("⏳ Cancelling broadcast...", show_alert=True)
+        else:
+            await callback.answer("❌ No active broadcast to cancel.", show_alert=True)
+        return True
+
     elif data == "broadcast_subs":
         await callback.answer()
         text = (
