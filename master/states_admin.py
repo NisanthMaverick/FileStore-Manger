@@ -553,7 +553,8 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
         return True
 
     elif state == "waiting_for_series_pag_limit":
-        ADMIN_STATES.pop(user_id, None)
+        state_data = ADMIN_STATES.pop(user_id, None)
+        journey_id = state_data["data"]["journey_id"] if state_data and "data" in state_data else None
         limit_text = message.text.strip() if message.text else ""
         try:
             limit = int(limit_text)
@@ -565,10 +566,10 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             text = f"❌ **Invalid number:** {e}"
 
         from .ui_files import show_series_management_menu
-        if message_id:
+        if message_id and journey_id:
             try:
                 await message.reply_text(text)
-                await show_series_management_menu(client, message.chat.id, message_id)
+                await show_series_management_menu(client, message.chat.id, message_id, journey_id)
             except Exception:
                 await message.reply_text(text)
         else:
@@ -576,7 +577,8 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
         return True
 
     elif state == "waiting_for_series_library_msg":
-        ADMIN_STATES.pop(user_id, None)
+        state_data = ADMIN_STATES.pop(user_id, None)
+        journey_id = state_data["data"]["journey_id"] if state_data and "data" in state_data else None
         msg_text = message.text.strip() if message.text else ""
         
         if msg_text.lower() == "none":
@@ -587,10 +589,10 @@ async def handle_admin_states(client: Client, message: Message, state: str, stat
             text = "✅ **Series Library Custom Message updated successfully!**"
 
         from .ui_files import show_series_management_menu
-        if message_id:
+        if message_id and journey_id:
             try:
                 await message.reply_text(text)
-                await show_series_management_menu(client, message.chat.id, message_id)
+                await show_series_management_menu(client, message.chat.id, message_id, journey_id)
             except Exception:
                 await message.reply_text(text)
         else:

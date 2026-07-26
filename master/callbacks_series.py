@@ -746,7 +746,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         ADMIN_STATES[user_id] = {"state": "waiting_for_series_pag_limit", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
         await callback.message.edit_text(
             "🔢 **Edit Series Buttons per Page**\n\nEnter the number of series buttons to display on a single page for users (e.g., `5`):\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"j_series_management_menu_{journey_id}")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"j_series_management_menu_{journey_id}")]])
         )
         return True
 
@@ -762,7 +762,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         ADMIN_STATES[user_id] = {"state": "waiting_for_series_library_msg", "message_id": callback.message.id, "data": {"journey_id": journey_id}}
         await callback.message.edit_text(
             "💬 **Edit Series Library Custom Message**\n\nEnter the custom display message to show above the series categories page. Send `none` to reset:\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"j_series_management_menu_{journey_id}")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"j_series_management_menu_{journey_id}")]])
         )
         return True
 

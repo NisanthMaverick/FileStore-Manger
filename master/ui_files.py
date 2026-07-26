@@ -534,7 +534,7 @@ async def show_series_management_menu(client: Client, chat_id: int, message_id: 
             InlineKeyboardButton("↕️ Reorder Series List", callback_data=f"series_reorder_menu_{journey_id}")
         ],
         [
-            InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"list_j_series_{journey_id}_0")
+            InlineKeyboardButton("🔙 Back", callback_data=f"list_j_series_{journey_id}_0")
         ]
     ])
     try:
@@ -593,7 +593,7 @@ async def show_series_reorder_menu(client: Client, chat_id: int, message_id: int
             InlineKeyboardButton(f"✅ Confirm Reorder ({len(selected_ids)} selected)", callback_data=f"reorder_confirm_{journey_id}")
         ])
         
-    buttons.append([InlineKeyboardButton("🔙 Back to Series Management", callback_data=f"j_series_management_menu_{journey_id}")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"j_series_management_menu_{journey_id}")])
     
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
