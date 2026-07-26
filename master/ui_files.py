@@ -219,7 +219,11 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
         parent_id = current_sec["parent_id"] if current_sec else None
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"browse_sec_{series_id}_{parent_id or 0}_{library_skip}")])
     else:
-        buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"manage_series_skip_{library_skip}")])
+        journey_id = series.get("journey_id")
+        if journey_id:
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"list_j_series_{journey_id}_{library_skip}")])
+        else:
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"manage_series_skip_{library_skip}")])
 
     markup = InlineKeyboardMarkup(buttons)
     if custom_pic:
@@ -342,7 +346,7 @@ async def show_journey_detail(client: Client, chat_id: int, message_id: int, jou
             InlineKeyboardButton("🗑 Delete Journey", callback_data=f"delete_journey_opt_{journey_id}")
         ],
         [
-            InlineKeyboardButton("🔙 Back to Journeys", callback_data="manage_series")
+            InlineKeyboardButton("🔙 Back", callback_data="manage_series")
         ]
     ]
     try:
@@ -382,7 +386,7 @@ async def show_manage_series_journey(client: Client, chat_id: int, message_id: i
     buttons.append([
         InlineKeyboardButton("⚙️ Series Management", callback_data=f"j_series_management_menu_{journey_id}")
     ])
-    buttons.append([InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"manage_journey_{journey_id}")])
     try:
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
@@ -461,7 +465,7 @@ async def show_journey_lock_settings(client: Client, chat_id: int, message_id: i
             InlineKeyboardButton("📁 Config Active List", callback_data=f"config_j_active_{journey_id}_0")
         ],
         [
-            InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")
+            InlineKeyboardButton("🔙 Back", callback_data=f"manage_journey_{journey_id}")
         ]
     ])
     try:

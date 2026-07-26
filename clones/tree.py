@@ -67,7 +67,7 @@ async def stop_clone_bot(token: str):
         except Exception as e:
             print(f"Failed to stop clone bot gracefully: {e}")
 
-async def show_user_tree(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, is_new_message: bool = False):
+async def show_user_tree(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, is_new_message: bool = False, library_skip: int = 0):
     from config import OWNER_ID
 
     async def _none():
@@ -225,9 +225,9 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
 
                 formatted_name = format_sec_name_btn(s['name'])
                 if is_unlocked:
-                    btn = InlineKeyboardButton(f"📥 {formatted_name}", callback_data=f"cl_send_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"📥 {formatted_name}", callback_data=f"cl_send_sec_{series_id}_{s['id']}_{library_skip}")
                 else:
-                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}_{library_skip}")
             else:
                 # Folder section
                 is_unlocked = True
@@ -239,9 +239,9 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                         
                 formatted_name = format_sec_name_btn(s['name'])
                 if is_unlocked:
-                    btn = InlineKeyboardButton(f"📁 {formatted_name}", callback_data=f"cl_tree_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"📁 {formatted_name}", callback_data=f"cl_tree_{series_id}_{s['id']}_{library_skip}")
                 else:
-                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}")
+                    btn = InlineKeyboardButton(f"🔒 {formatted_name}", callback_data=f"cl_locked_sec_{series_id}_{s['id']}_{library_skip}")
             
             row.append(btn)
             if len(row) == per_row:
@@ -255,9 +255,9 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
 
     if section_id:
         parent_id = current_sec["parent_id"] if current_sec else None
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}_{library_skip}")])
     else:
-        buttons.append([InlineKeyboardButton("🔙 Back to Series Library", callback_data=f"cl_journey_{series['journey_id'] or 0}_0")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"cl_journey_{series['journey_id'] or 0}_{library_skip}")])
 
     markup = InlineKeyboardMarkup(buttons)
     if custom_pic:

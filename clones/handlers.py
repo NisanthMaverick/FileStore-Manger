@@ -123,7 +123,15 @@ async def clone_available_series_handler(client: Client, message: Message):
             
         text += f"🗺️ **{j['name']}**\n"
         for s in series_list:
-            is_series_unlocked = s.get("is_active", True) or is_user_premium
+            is_series_unlocked = True
+            if j.get("is_locked", False):
+                is_series_unlocked = is_user_premium
+            elif j.get("lock_buttons_enabled", False):
+                if not s.get("is_active", True) and j.get("lock_old_series_enabled", True):
+                    is_series_unlocked = is_user_premium
+                elif j.get("lock_individual_enabled", False) and s.get("is_locked", False):
+                    is_series_unlocked = is_user_premium
+
             lock_emoji = "" if is_series_unlocked else "🔒 "
             text += f" ▪️ {lock_emoji}**{s['title']}**\n"
             if s.get('description'):

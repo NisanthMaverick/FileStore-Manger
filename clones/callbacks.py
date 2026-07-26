@@ -47,7 +47,9 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         await handle_payload(client, fake_message, payload)
 
     elif data.startswith("cl_series_"):
-        series_id = int(data.split("_")[2])
+        parts = data.split("_")
+        series_id = int(parts[2])
+        library_skip = int(parts[3]) if len(parts) > 3 else 0
         series = await database.get_series(series_id)
         if series:
             journey = None
@@ -94,22 +96,23 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                             InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
                         ],
                         [
-                            InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0")
+                            InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_0_{library_skip}")
                         ],
                         [
-                            InlineKeyboardButton("🔙 Back to Categories", callback_data=f"cl_journey_{series['journey_id'] or 0}_0")
+                            InlineKeyboardButton("🔙 Back", callback_data=f"cl_journey_{series['journey_id'] or 0}_{library_skip}")
                         ]
                     ])
                     await callback.message.edit_text(text, reply_markup=markup)
                     return
 
         await callback.answer()
-        await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
+        await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None, library_skip=library_skip)
 
     elif data.startswith("cl_tree_"):
         parts = data.split("_")
         series_id = int(parts[2])
         section_id = int(parts[3])
+        library_skip = int(parts[4]) if len(parts) > 4 else 0
 
         if section_id > 0:
             sec = await database.get_section(section_id)
@@ -138,7 +141,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 return
 
         await callback.answer()
-        await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=section_id if section_id > 0 else None)
+        await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=section_id if section_id > 0 else None, library_skip=library_skip)
 
     elif data.startswith("cl_send_sec_"):
         parts = data.split("_")
@@ -325,7 +328,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         )
         
         if not journey:
-            return await callback.message.edit_text("❌ Category not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")]]))
+            return await callback.message.edit_text("❌ Category not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="cl_browse_series_0")]]))
             
         if journey.get("is_locked", False) and not is_user_premium:
             owner_username = None
@@ -351,7 +354,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                     InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_j_sub_{journey_id}")
                 ],
                 [
-                    InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")
+                    InlineKeyboardButton("🔙 Back", callback_data="cl_browse_series_0")
                 ]
             ])
             await callback.message.edit_text(text, reply_markup=markup)
@@ -368,16 +371,19 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             row = []
             for s in sliced_list:
                 text += f"▪️ **{s['title']}**\n"
-                is_series_unlocked = s.get("is_active", True) or is_user_premium
+                is_series_unlocked = True
                 if journey.get("is_locked", False):
                     is_series_unlocked = is_user_premium
-                elif journey["lock_buttons_enabled"] and journey["lock_individual_enabled"] and s.get("is_locked", False):
-                    is_series_unlocked = is_user_premium
+                elif journey.get("lock_buttons_enabled", False):
+                    if not s.get("is_active", True) and journey.get("lock_old_series_enabled", True):
+                        is_series_unlocked = is_user_premium
+                    elif journey.get("lock_individual_enabled", False) and s.get("is_locked", False):
+                        is_series_unlocked = is_user_premium
                     
                 if is_series_unlocked:
-                    btn = InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                    btn = InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_{skip}")
                 else:
-                    btn = InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
+                    btn = InlineKeyboardButton(f"🔒 {s['title']}", callback_data=f"cl_series_{s['id']}_{skip}")
                 row.append(btn)
                 if len(row) == 2:
                     buttons.append(row)
@@ -393,7 +399,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if pag_row:
             buttons.append(pag_row)
             
-        buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="cl_browse_series_0")])
         await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data == "cl_welcome_home":
@@ -429,6 +435,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         parts = data.split("_")
         series_id = int(parts[3])
         sec_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         
         sec = await database.get_section(sec_id)
         parent_id = sec["parent_id"] if sec else None
@@ -453,10 +460,10 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                 InlineKeyboardButton("👨‍💻 Contact Admin", url=contact_url)
             ],
             [
-                InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_{sec_id}")
+                InlineKeyboardButton("🔄 Check Subscription", callback_data=f"cl_chk_sub_{series_id}_{sec_id}_{library_skip}")
             ],
             [
-                InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}")
+                InlineKeyboardButton("🔙 Back", callback_data=f"cl_tree_{series_id}_{parent_id or 0}_{library_skip}")
             ]
         ])
         await callback.message.edit_text(text, reply_markup=markup)
@@ -465,6 +472,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         parts = data.split("_")
         series_id = int(parts[3])
         sec_id = int(parts[4])
+        library_skip = int(parts[5]) if len(parts) > 5 else 0
         
         await callback.answer("🔄 Checking subscription status...", show_alert=False)
         is_now_premium = await database.sync_single_premium_user(user_id)
@@ -496,9 +504,9 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                         await handle_auto_delete_if_enabled(client, user_id, sent_msg_ids)
                     return
                 else:
-                    await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id)
+                    await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=sec_id, library_skip=library_skip)
             else:
-                await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None)
+                await show_user_tree(client, callback.message.chat.id, callback.message.id, series_id, section_id=None, library_skip=library_skip)
         else:
             await callback.answer("❌ No active premium subscription found for your ID (Plan 1 required).", show_alert=True)
 
@@ -525,11 +533,14 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                     row = []
                     for s in sliced_list:
                         text += f"▪️ **{s['title']}**\n"
-                        is_series_unlocked = s.get("is_active", True) or is_user_premium
+                        is_series_unlocked = True
                         if journey.get("is_locked", False):
                             is_series_unlocked = is_user_premium
-                        elif journey["lock_buttons_enabled"] and journey["lock_individual_enabled"] and s.get("is_locked", False):
-                            is_series_unlocked = is_user_premium
+                        elif journey.get("lock_buttons_enabled", False):
+                            if not s.get("is_active", True) and journey.get("lock_old_series_enabled", True):
+                                is_series_unlocked = is_user_premium
+                            elif journey.get("lock_individual_enabled", False) and s.get("is_locked", False):
+                                is_series_unlocked = is_user_premium
                             
                         if is_series_unlocked:
                             btn = InlineKeyboardButton(f"🎬 {s['title']}", callback_data=f"cl_series_{s['id']}_0")
@@ -546,8 +557,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
                     pag_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"cl_journey_{journey_id}_{limit}"))
                 if pag_row:
                     buttons.append(pag_row)
-                buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="cl_browse_series_0")])
+                buttons.append([InlineKeyboardButton("🔙 Back", callback_data="cl_browse_series_0")])
                 await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         else:
             await callback.answer("❌ No active premium subscription found for your ID (Plan 1 required).", show_alert=True)
-
