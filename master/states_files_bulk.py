@@ -82,32 +82,8 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
             has_link = any(is_telegram_link(clean_link_token(w)) for w in line_words)
             
             if has_link:
-                # Treat the entire line as a single file entry
-                # Split by the first comma to separate button name and description+links
-                if ',' in line:
-                    parts = [part.strip() for part in line.split(',')]
-                    if len(parts) >= 3:
-                        button_name = f"{parts[0]} ({parts[1]})"
-                        desc_and_links = ",".join(parts[2:])
-                        is_three_parts = True
-                    else:
-                        button_name = parts[0]
-                        desc_and_links = parts[1]
-                        is_three_parts = False
-                else:
-                    is_three_parts = False
-                    split_done = False
-                    for emoji in ['📅', '🗓️', '🗓', '📆']:
-                        if emoji in line:
-                            p = line.split(emoji, 1)
-                            button_name = p[0].strip()
-                            desc_and_links = f"{emoji}{p[1]}"
-                            split_done = True
-                            break
-                    if not split_done:
-                        button_name = ""
-                        desc_and_links = line
-                
+                # Treat the entire line as a single file entry (no description parsing for bulk files)
+                desc_and_links = line
                 sub_parts = [sp.strip() for sp in desc_and_links.split('+') if sp.strip()]
                 if not sub_parts:
                     continue
@@ -122,22 +98,13 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                         if sec_last_word and is_telegram_link(sec_last_word):
                             end_link = last_word
                             start_link = sec_last_word
-                            desc_part = " ".join(first_words[:-2]).strip()
+                            button_name = " ".join(first_words[:-2]).strip()
                         else:
                             end_link = last_word
                             start_link = last_word
-                            desc_part = " ".join(first_words[:-1]).strip()
+                            button_name = " ".join(first_words[:-1]).strip()
                             
                         ranges = [{"start_link": start_link, "end_link": end_link}]
-                        
-                        if not button_name:
-                            button_name = desc_part
-                            description = ""
-                        else:
-                            if is_three_parts:
-                                description = f"[{desc_part}]"
-                            else:
-                                description = desc_part
                         
                         valid = True
                         for spart in sub_parts[1:]:
@@ -159,10 +126,9 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                                 break
                         
                         if valid:
-                            full_name = f"{button_name}\n{description}" if description else button_name
                             parsed_entries.append({
                                 "type": "file",
-                                "name": full_name,
+                                "name": button_name,
                                 "ranges": ranges
                             })
             else:
@@ -173,32 +139,20 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                     if part.startswith('"') and part.endswith('"'):
                         folder_name = part[1:-1].strip()
                         if folder_name:
-                            split_done = False
-                            for emoji in ['📅', '🗓️', '🗓', '📆']:
-                                if emoji in folder_name:
-                                    p = folder_name.split(emoji, 1)
-                                    folder_name = f"{p[0].strip()}\n{emoji}{p[1]}"
-                                    split_done = True
-                                    break
                             parsed_entries.append({"type": "folder", "name": folder_name})
                     else:
                         folder_name = part.strip()
                         if folder_name:
-                            split_done = False
-                            for emoji in ['📅', '🗓️', '🗓', '📆']:
-                                if emoji in folder_name:
-                                    p = folder_name.split(emoji, 1)
-                                    folder_name = f"{p[0].strip()}\n{emoji}{p[1]}"
-                                    split_done = True
-                                    break
                             parsed_entries.append({"type": "folder", "name": folder_name})
 
         if not parsed_entries:
             await message.reply_text(
                 "⚠️ **No valid entries found.**\n\n"
-                "Please enter items separated by newlines:\n"
-                "📁 Folder: `\"Folder Name\"`\n"
-                "📥 File: `Button Name, Description startLink endLink`\n\n"
+                "Please format your input correctly:\n"
+                "📁 **Folder:** `\"Folder Name\"` (e.g. `\"Season 01\"`)\n"
+                "📄 **File:** `Button Name Link` or `Button Name startLink endLink` (e.g. `Episode 01 https://t.me/c/123/4 https://t.me/c/123/13`)\n\n"
+                "💡 Use `+` to join multiple links/ranges.\n"
+                "*(Note: Descriptions are not supported in bulk add. Use the Single File scenario to add descriptions)*\n\n"
                 "Try again or send `/cancel`."
             )
             return True

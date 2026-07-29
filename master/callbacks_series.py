@@ -293,16 +293,33 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         library_skip = int(parts[5]) if len(parts) > 5 else 0
         await callback.answer()
         ADMIN_STATES[user_id] = {"state": "waiting_for_bulk_add", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
-        await callback.message.edit_text(
+        
+        bulk_note = (
             "📦 **Bulk Add Files & Folders**\n\n"
-            "Paste your entries (separated by newlines):\n\n"
-            "📁 Folder: `\"Folder Name\"`\n"
-            "📥 File/Button: `Button Name, Description startLink endLink`\n\n"
-            "💡 **Example:**\n"
-            "`\"Season 1\"`\n"
-            "`Episode 01, Added today startLink endLink`\n"
-            "`Episode 02 startLink endLink`\n\n"
-            "❌ Send `/cancel` to abort.",
+            "Please paste your entries (separated by newlines):\n\n"
+            "📁 **How to Add Folders:**\n"
+            "• Wrap the folder name in double quotes: `\"Folder Name\"`\n"
+            "  *Example:* `\"Season 01\"`\n\n"
+            "📄 **How to Add Files / Buttons:**\n"
+            "• Format: `Button Name Link` or `Button Name startLink endLink`\n"
+            "  *(Note: Descriptions are not supported in bulk process)*\n"
+            "  *Example:* `Episode 01 https://t.me/c/123/4` \n\n"
+            "🔗 **How to Add Inbetween Links (Message Ranges):**\n"
+            "• Paste the start and end Telegram links separated by a space:\n"
+            "  *Example:* `Episode 01-10 https://t.me/c/123/4 https://t.me/c/123/13`\n"
+            "  *(This will copy all files between the two links)*\n\n"
+            "➕ **Multiple Links / Ranges per Button:**\n"
+            "• Use `+` to join multiple single links or ranges:\n"
+            "  *Example:* `Episode 01 https://t.me/c/123/4 https://t.me/c/123/13 + https://t.me/c/123/25`\n\n"
+            "💡 **Full Copy-Paste Example:**\n"
+            "`\"Season 01\"`\n"
+            "`Episode 01 https://t.me/c/12345/100`\n"
+            "`Episode 02-05 https://t.me/c/12345/101 https://t.me/c/12345/104`\n"
+            "`Special Ep https://t.me/c/12345/105 + https://t.me/c/12345/110`\n\n"
+            "❌ Send `/cancel` to abort."
+        )
+        await callback.message.edit_text(
+            bulk_note,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
         )
         return True
