@@ -11,13 +11,11 @@ from .batch import copy_files_silently, run_batch_copy
 
 def clean_link_token(token: str) -> str:
     cleaned = token.strip()
-    if cleaned.startswith('(') and cleaned.endswith(')'):
-        cleaned = cleaned[1:-1].strip()
-    elif cleaned.startswith('('):
-        cleaned = cleaned[1:].strip()
-    elif cleaned.endswith(')'):
-        cleaned = cleaned[:-1].strip()
-    return cleaned
+    while cleaned and cleaned[0] in ('(', '[', '{', '"', "'"):
+        cleaned = cleaned[1:]
+    while cleaned and cleaned[-1] in (')', ']', '}', '"', "'", ',', '.', ';', ':'):
+        cleaned = cleaned[:-1]
+    return cleaned.strip()
 
 def is_telegram_link(token: str) -> bool:
     token_lower = token.lower().strip()
