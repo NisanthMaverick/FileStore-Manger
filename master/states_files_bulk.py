@@ -23,6 +23,166 @@ def is_telegram_link(token: str) -> bool:
         return True
     return parse_tg_link(token) is not None
 
+def split_top_level(text: str) -> list[str]:
+    parts = []
+    current = []
+    depth = 0
+    in_quotes = False
+    
+    bracket_map = {'{': '}', '[': ']', '(': ')'}
+    inverse_brackets = {'}': '{', ']': '[', ')': '('}
+    stack = []
+    
+    for char in text:
+        if char == '"':
+            in_quotes = not in_quotes
+            current.append(char)
+        elif in_quotes:
+            current.append(char)
+        elif char in bracket_map:
+            depth += 1
+            stack.append(char)
+            current.append(char)
+        elif char in inverse_brackets:
+            if stack and stack[-1] == inverse_brackets[char]:
+                stack.pop()
+                depth -= 1
+            current.append(char)
+        elif depth == 0 and char in (',', '\n'):
+            segment = "".join(current).strip()
+            if segment:
+                parts.append(segment)
+            current = []
+        else:
+            current.append(char)
+            
+    segment = "".join(current).strip()
+    if segment:
+        parts.append(segment)
+        
+    return parts
+
+def parse_bulk_segment(segment: str) -> dict | None:
+    segment = segment.strip()
+    if not segment:
+        return None
+        
+    # Check if this segment represents a folder: starts with '[' and ends with ']'
+    # e.g., ["Folder Name"{ contents }]
+    if segment.startswith('[') and segment.endswith(']'):
+        first_bracket = segment.find('[')
+        first_brace = segment.find('{')
+        last_brace = segment.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            name_part = segment[first_bracket + 1:first_brace].strip()
+            # Strip quotes if any
+            if name_part.startswith('"') and name_part.endswith('"'):
+                folder_name = name_part[1:-1].strip()
+            elif name_part.startswith("'") and name_part.endswith("'"):
+                folder_name = name_part[1:-1].strip()
+            else:
+                folder_name = name_part.strip()
+                
+            contents = segment[first_brace + 1:last_brace].strip()
+            children = parse_bulk_hierarchy(contents)
+            return {
+                "type": "folder",
+                "name": folder_name,
+                "children": children
+            }
+            
+    # File button parser
+    segment_words = segment.split()
+    has_link = any(is_telegram_link(clean_link_token(w)) for w in segment_words)
+    if has_link:
+        sub_parts = [sp.strip() for sp in segment.split('+') if sp.strip()]
+        if not sub_parts:
+            return None
+            
+        first_part = sub_parts[0]
+        first_words = first_part.split()
+        if len(first_words) >= 1:
+            last_word = clean_link_token(first_words[-1])
+            sec_last_word = clean_link_token(first_words[-2]) if len(first_words) >= 2 else None
+            
+            if is_telegram_link(last_word):
+                if sec_last_word and is_telegram_link(sec_last_word):
+                    end_link = last_word
+                    start_link = sec_last_word
+                    button_name = " ".join(first_words[:-2]).strip()
+                else:
+                    end_link = last_word
+                    start_link = last_word
+                    button_name = " ".join(first_words[:-1]).strip()
+                    
+                ranges = [{"start_link": start_link, "end_link": end_link}]
+                
+                valid = True
+                for spart in sub_parts[1:]:
+                    spart_clean = spart.strip()
+                    if spart_clean.startswith('(') and spart_clean.endswith(')'):
+                        spart_clean = spart_clean[1:-1].strip()
+                    spart_words = [clean_link_token(w) for w in spart_clean.split() if w]
+                    if not spart_words:
+                        continue
+                    if len(spart_words) >= 2 and is_telegram_link(spart_words[-1]) and is_telegram_link(spart_words[-2]):
+                        ranges.append({
+                            "start_link": spart_words[-2],
+                            "end_link": spart_words[-1]
+                        })
+                    elif len(spart_words) >= 1 and is_telegram_link(spart_words[-1]):
+                        ranges.append({
+                            "start_link": spart_words[-1],
+                            "end_link": spart_words[-1]
+                        })
+                    else:
+                        valid = False
+                        break
+                        
+                if valid:
+                    return {
+                        "type": "file",
+                        "name": button_name,
+                        "ranges": ranges
+                    }
+    return None
+
+def parse_bulk_hierarchy(text: str) -> list[dict]:
+    # Pre-process lines: strip comments and merge '+' lines
+    lines = text.split('\n')
+    processed_lines = []
+    for line in lines:
+        if '#' in line:
+            line = line.split('#', 1)[0]
+        processed_lines.append(line.strip())
+        
+    merged_lines = []
+    for line in processed_lines:
+        if not line:
+            continue
+        if merged_lines and (merged_lines[-1].endswith('+') or line.startswith('+')):
+            merged_lines[-1] = (merged_lines[-1] + " " + line).strip()
+        else:
+            merged_lines.append(line)
+            
+    cleaned_text = "\n".join(merged_lines).strip()
+    
+    segments = split_top_level(cleaned_text)
+    parsed_entries = []
+    for seg in segments:
+        parsed = parse_bulk_segment(seg)
+        if parsed:
+            parsed_entries.append(parsed)
+    return parsed_entries
+
+def count_nodes(nodes):
+    total = 0
+    for node in nodes:
+        total += 1
+        if node["type"] == "folder" and "children" in node:
+            total += count_nodes(node["children"])
+    return total
+
 async def handle_bulk_states(client: Client, message: Message, state: str, state_data: dict, message_id: int) -> bool:
     user_id = message.from_user.id
 
@@ -54,104 +214,22 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
                 await message.reply_text("❌ DB Storage Channel is not configured.")
             return True
 
-        # Pre-process: merge lines that have '+' at the boundary
-        lines = bulk_text.split('\n')
-        merged_lines = []
-        for line in lines:
-            line = line.strip()
-            if '#' in line:
-                line = line.split('#', 1)[0].strip()
-            if not line:
-                continue
-            if merged_lines and (merged_lines[-1].endswith('+') or line.startswith('+')):
-                merged_lines[-1] = (merged_lines[-1] + " " + line).strip()
-            else:
-                merged_lines.append(line)
-        processed_text = "\n".join(merged_lines)
-
-        parsed_entries = []
-        for line in merged_lines:
-            line = line.strip()
-            if not line:
-                continue
-            
-            # Split line by commas outside double quotes to separate multiple buttons
-            parts = [p.strip() for p in re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line) if p.strip()]
-            for part in parts:
-                part_words = part.split()
-                has_link = any(is_telegram_link(clean_link_token(w)) for w in part_words)
-                
-                if has_link:
-                    # Treat the part as a file entry
-                    sub_parts = [sp.strip() for sp in part.split('+') if sp.strip()]
-                    if not sub_parts:
-                        continue
-                    
-                    first_part = sub_parts[0]
-                    first_words = first_part.split()
-                    if len(first_words) >= 1:
-                        last_word = clean_link_token(first_words[-1])
-                        sec_last_word = clean_link_token(first_words[-2]) if len(first_words) >= 2 else None
-                        
-                        if is_telegram_link(last_word):
-                            if sec_last_word and is_telegram_link(sec_last_word):
-                                end_link = last_word
-                                start_link = sec_last_word
-                                button_name = " ".join(first_words[:-2]).strip()
-                            else:
-                                end_link = last_word
-                                start_link = last_word
-                                button_name = " ".join(first_words[:-1]).strip()
-                                
-                            ranges = [{"start_link": start_link, "end_link": end_link}]
-                            
-                            valid = True
-                            for spart in sub_parts[1:]:
-                                spart_words = [clean_link_token(w) for w in spart.split() if w]
-                                if not spart_words:
-                                    continue
-                                if len(spart_words) >= 2 and is_telegram_link(spart_words[-1]) and is_telegram_link(spart_words[-2]):
-                                    ranges.append({
-                                        "start_link": spart_words[-2],
-                                        "end_link": spart_words[-1]
-                                    })
-                                elif len(spart_words) >= 1 and is_telegram_link(spart_words[-1]):
-                                    ranges.append({
-                                        "start_link": spart_words[-1],
-                                        "end_link": spart_words[-1]
-                                    })
-                                else:
-                                    valid = False
-                                    break
-                            
-                            if valid:
-                                parsed_entries.append({
-                                    "type": "file",
-                                    "name": button_name,
-                                    "ranges": ranges
-                                })
-                else:
-                    # No link, so it must be a folder
-                    if part.startswith('"') and part.endswith('"'):
-                        folder_name = part[1:-1].strip()
-                    else:
-                        folder_name = part.strip()
-                    if folder_name:
-                        parsed_entries.append({"type": "folder", "name": folder_name})
+        parsed_entries = parse_bulk_hierarchy(bulk_text)
 
         if not parsed_entries:
             await message.reply_text(
                 "⚠️ **No valid entries found.**\n\n"
-                "Please format your input correctly:\n"
-                "📁 **Folder:** `\"Folder Name\"` (e.g. `\"Season 01\"`)\n"
-                "📄 **File:** `Button Name Link` or `Button Name startLink endLink` (e.g. `Episode 01 https://t.me/c/123/4 https://t.me/c/123/13`)\n\n"
-                "💡 Use `+` to join multiple links/ranges.\n"
-                "*(Note: Descriptions are not supported in bulk add. Use the Single File scenario to add descriptions)*\n\n"
+                "Please verify your layout format and make sure there are no typos.\n\n"
+                "📁 Folder layout:\n"
+                "`[\"Folder Name\"{\n    Contents\n}]`\n\n"
+                "📄 File layout:\n"
+                "`Button Name Link`\n"
+                "`Button Name startLink endLink`\n\n"
                 "Try again or send `/cancel`."
             )
             return True
 
-        total_entries = len(parsed_entries)
+        total_entries = count_nodes(parsed_entries)
         initial_text = f"⏳ **Creating buttons...**\n\nProgress: 0/{total_entries}"
         progress_msg = None
         
@@ -176,67 +254,87 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
         status_lines = []
         completed = 0
 
-        for entry in parsed_entries:
-            if user_id in ADMIN_STATES and ADMIN_STATES[user_id].get("cancel_requested"):
-                status_lines.append("🛑 **Creation stopped by admin.**")
-                break
+        async def create_nodes_recursive(nodes, parent_folder_id):
+            nonlocal completed
+            for node in nodes:
+                if user_id in ADMIN_STATES and ADMIN_STATES[user_id].get("cancel_requested"):
+                    status_lines.append("🛑 **Creation stopped by admin.**")
+                    return False
                 
-            if entry["type"] == "folder":
-                name = entry["name"]
-                try:
-                    await database.create_section(name, series_id, parent_id=parent_id, sec_type="folder")
-                    status_lines.append(f"📁 {name} Created")
-                except Exception as e:
-                    status_lines.append(f"❌ {name} (Error: {e})")
-            elif entry["type"] == "file":
-                name = entry["name"]
-                ranges = entry["ranges"]
-
-                # Validate all ranges first
-                validated_ranges = []
-                has_error = False
-                error_msg = ""
-
-                for r in ranges:
-                    start_link = r["start_link"]
-                    end_link = r["end_link"]
-                    start_info = parse_tg_link(start_link)
-                    end_info = parse_tg_link(end_link)
-
-                    if not start_info or not end_info:
-                        has_error = True
-                        error_msg = "Invalid links"
-                        break
-                    elif start_info[0] != end_info[0]:
-                        has_error = True
-                        error_msg = "Links from different chats"
-                        break
-                    elif end_info[1] < start_info[1]:
-                        has_error = True
-                        error_msg = "End link is before start link"
-                        break
-                    else:
-                        validated_ranges.append((start_info[0], start_info[1], end_info[1]))
-
-                if has_error:
-                    status_lines.append(f"❌ {name} ({error_msg})")
-                else:
+                if node["type"] == "folder":
+                    name = node["name"]
                     try:
-                        new_sec_id = await database.create_section(name, series_id, parent_id=parent_id, sec_type="files")
-                        for source_chat_id, start_msg_id, end_msg_id in validated_ranges:
-                            await copy_files_silently(client, db_channel, source_chat_id, start_msg_id, end_msg_id, series_id, new_sec_id, name)
-                        status_lines.append(f"✅ {name}")
+                        new_folder_id = await database.create_section(name, series_id, parent_id=parent_folder_id, sec_type="folder")
+                        status_lines.append(f"📁 {name} Created")
+                        
+                        completed += 1
+                        display_lines = status_lines[-10:]
+                        progress_text = f"⏳ **Creating buttons...**\n\n" + "\n".join(display_lines) + f"\n\nProgress: {completed}/{total_entries}"
+                        try:
+                            await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=progress_text, reply_markup=reply_markup)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.2)
+                        
+                        if "children" in node and node["children"]:
+                            success = await create_nodes_recursive(node["children"], new_folder_id)
+                            if not success:
+                                return False
                     except Exception as e:
-                        status_lines.append(f"❌ {name} (Copy error: {e})")
+                        status_lines.append(f"❌ Folder: {name} (Error: {e})")
+                        completed += 1
+                        
+                elif node["type"] == "file":
+                    name = node["name"]
+                    ranges = node["ranges"]
+                    
+                    validated_ranges = []
+                    has_error = False
+                    error_msg = ""
+                    
+                    for r in ranges:
+                        start_link = r["start_link"]
+                        end_link = r["end_link"]
+                        start_info = parse_tg_link(start_link)
+                        end_info = parse_tg_link(end_link)
+                        
+                        if not start_info or not end_info:
+                            has_error = True
+                            error_msg = "Invalid links"
+                            break
+                        elif start_info[0] != end_info[0]:
+                            has_error = True
+                            error_msg = "Links from different chats"
+                            break
+                        elif end_info[1] < start_info[1]:
+                            has_error = True
+                            error_msg = "End link is before start link"
+                            break
+                        else:
+                            validated_ranges.append((start_info[0], start_info[1], end_info[1]))
+                            
+                    if has_error:
+                        status_lines.append(f"❌ {name} ({error_msg})")
+                    else:
+                        try:
+                            new_sec_id = await database.create_section(name, series_id, parent_id=parent_folder_id, sec_type="files")
+                            for source_chat_id, start_msg_id, end_msg_id in validated_ranges:
+                                await copy_files_silently(client, db_channel, source_chat_id, start_msg_id, end_msg_id, series_id, new_sec_id, name)
+                            status_lines.append(f"✅ {name}")
+                        except Exception as e:
+                            status_lines.append(f"❌ {name} (Copy error: {e})")
+                            
+                    completed += 1
+                    display_lines = status_lines[-10:]
+                    progress_text = f"⏳ **Creating buttons...**\n\n" + "\n".join(display_lines) + f"\n\nProgress: {completed}/{total_entries}"
+                    try:
+                        await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=progress_text, reply_markup=reply_markup)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.2)
+            return True
 
-            completed += 1
-            display_lines = status_lines[-10:]
-            progress_text = f"⏳ **Creating buttons...**\n\n" + "\n".join(display_lines) + f"\n\nProgress: {completed}/{total_entries}"
-            try:
-                await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text=progress_text, reply_markup=reply_markup)
-            except Exception:
-                pass
-            await asyncio.sleep(0.2)
+        await create_nodes_recursive(parsed_entries, parent_id)
 
         ADMIN_STATES.pop(user_id, None)
 
