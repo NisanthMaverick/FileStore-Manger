@@ -296,7 +296,7 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         
         bulk_note = (
             "📦 **Bulk Add Files & Folders**\n\n"
-            "Please paste your entries (separated by newlines):\n\n"
+            "Please paste your entries (separated by newlines or commas):\n\n"
             "📁 **How to Add Folders:**\n"
             "• Wrap the folder name in double quotes: `\"Folder Name\"`\n"
             "  *Example:* `\"Season 01\"`\n\n"
@@ -311,11 +311,12 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
             "➕ **Multiple Links / Ranges per Button:**\n"
             "• Use `+` to join multiple single links or ranges:\n"
             "  *Example:* `Episode 01 https://t.me/c/123/4 https://t.me/c/123/13 + https://t.me/c/123/25`\n\n"
+            "✨ **Comma Separation:**\n"
+            "• You can put multiple folder/file buttons on the same line separated by a comma `,`.\n\n"
             "💡 **Full Copy-Paste Example:**\n"
             "`\"Season 01\"`\n"
-            "`Episode 01 https://t.me/c/12345/100`\n"
-            "`Episode 02-05 https://t.me/c/12345/101 https://t.me/c/12345/104`\n"
-            "`Special Ep https://t.me/c/12345/105 + https://t.me/c/12345/110`\n\n"
+            "`EP (01 - 04) https://t.me/c/12345/100 https://t.me/c/12345/103, EP (05 - 08) https://t.me/c/12345/104 https://t.me/c/12345/107`\n"
+            "`Special Ep https://t.me/c/12345/108 + https://t.me/c/12345/110`\n\n"
             "❌ Send `/cancel` to abort."
         )
         await callback.message.edit_text(

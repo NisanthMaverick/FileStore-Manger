@@ -75,73 +75,69 @@ async def handle_bulk_states(client: Client, message: Message, state: str, state
             if not line:
                 continue
             
-            # Check if this line has any telegram links
-            line_words = line.split()
-            has_link = any(is_telegram_link(clean_link_token(w)) for w in line_words)
-            
-            if has_link:
-                # Treat the entire line as a single file entry (no description parsing for bulk files)
-                desc_and_links = line
-                sub_parts = [sp.strip() for sp in desc_and_links.split('+') if sp.strip()]
-                if not sub_parts:
-                    continue
+            # Split line by commas outside double quotes to separate multiple buttons
+            parts = [p.strip() for p in re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line) if p.strip()]
+            for part in parts:
+                part_words = part.split()
+                has_link = any(is_telegram_link(clean_link_token(w)) for w in part_words)
                 
-                first_part = sub_parts[0]
-                first_words = first_part.split()
-                if len(first_words) >= 1:
-                    last_word = clean_link_token(first_words[-1])
-                    sec_last_word = clean_link_token(first_words[-2]) if len(first_words) >= 2 else None
+                if has_link:
+                    # Treat the part as a file entry
+                    sub_parts = [sp.strip() for sp in part.split('+') if sp.strip()]
+                    if not sub_parts:
+                        continue
                     
-                    if is_telegram_link(last_word):
-                        if sec_last_word and is_telegram_link(sec_last_word):
-                            end_link = last_word
-                            start_link = sec_last_word
-                            button_name = " ".join(first_words[:-2]).strip()
-                        else:
-                            end_link = last_word
-                            start_link = last_word
-                            button_name = " ".join(first_words[:-1]).strip()
-                            
-                        ranges = [{"start_link": start_link, "end_link": end_link}]
+                    first_part = sub_parts[0]
+                    first_words = first_part.split()
+                    if len(first_words) >= 1:
+                        last_word = clean_link_token(first_words[-1])
+                        sec_last_word = clean_link_token(first_words[-2]) if len(first_words) >= 2 else None
                         
-                        valid = True
-                        for spart in sub_parts[1:]:
-                            spart_words = [clean_link_token(w) for w in spart.split() if w]
-                            if not spart_words:
-                                continue
-                            if len(spart_words) >= 2 and is_telegram_link(spart_words[-1]) and is_telegram_link(spart_words[-2]):
-                                ranges.append({
-                                    "start_link": spart_words[-2],
-                                    "end_link": spart_words[-1]
-                                })
-                            elif len(spart_words) >= 1 and is_telegram_link(spart_words[-1]):
-                                ranges.append({
-                                    "start_link": spart_words[-1],
-                                    "end_link": spart_words[-1]
-                                })
+                        if is_telegram_link(last_word):
+                            if sec_last_word and is_telegram_link(sec_last_word):
+                                end_link = last_word
+                                start_link = sec_last_word
+                                button_name = " ".join(first_words[:-2]).strip()
                             else:
-                                valid = False
-                                break
-                        
-                        if valid:
-                            parsed_entries.append({
-                                "type": "file",
-                                "name": button_name,
-                                "ranges": ranges
-                            })
-            else:
-                # No link, so it must be a folder list
-                # Split by commas outside double quotes
-                parts = [p.strip() for p in re.split(r',(?=(?:[^"]*"[^"]*")*[^"]*$)', line) if p.strip()]
-                for part in parts:
+                                end_link = last_word
+                                start_link = last_word
+                                button_name = " ".join(first_words[:-1]).strip()
+                                
+                            ranges = [{"start_link": start_link, "end_link": end_link}]
+                            
+                            valid = True
+                            for spart in sub_parts[1:]:
+                                spart_words = [clean_link_token(w) for w in spart.split() if w]
+                                if not spart_words:
+                                    continue
+                                if len(spart_words) >= 2 and is_telegram_link(spart_words[-1]) and is_telegram_link(spart_words[-2]):
+                                    ranges.append({
+                                        "start_link": spart_words[-2],
+                                        "end_link": spart_words[-1]
+                                    })
+                                elif len(spart_words) >= 1 and is_telegram_link(spart_words[-1]):
+                                    ranges.append({
+                                        "start_link": spart_words[-1],
+                                        "end_link": spart_words[-1]
+                                    })
+                                else:
+                                    valid = False
+                                    break
+                            
+                            if valid:
+                                parsed_entries.append({
+                                    "type": "file",
+                                    "name": button_name,
+                                    "ranges": ranges
+                                })
+                else:
+                    # No link, so it must be a folder
                     if part.startswith('"') and part.endswith('"'):
                         folder_name = part[1:-1].strip()
-                        if folder_name:
-                            parsed_entries.append({"type": "folder", "name": folder_name})
                     else:
                         folder_name = part.strip()
-                        if folder_name:
-                            parsed_entries.append({"type": "folder", "name": folder_name})
+                    if folder_name:
+                        parsed_entries.append({"type": "folder", "name": folder_name})
 
         if not parsed_entries:
             await message.reply_text(
