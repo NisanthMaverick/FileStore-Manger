@@ -431,13 +431,17 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         if markup:
             full_markup = list(markup.inline_keyboard)
         full_markup.append([InlineKeyboardButton("🎬 Browse Series / Categories", callback_data="cl_browse_series_0")])
-        full_markup.append([InlineKeyboardButton("ℹ️ Info", callback_data="cl_user_more_info")])
+        if settings.get("info_button_enabled", True):
+            full_markup.append([InlineKeyboardButton("ℹ️ Info", callback_data="cl_user_more_info")])
         
         await callback.message.edit_text(welcome_text, reply_markup=InlineKeyboardMarkup(full_markup))
 
     elif data == "cl_user_more_info":
-        await callback.answer()
         settings = await database.get_settings()
+        if not settings.get("info_button_enabled", True):
+            await callback.answer("This option is disabled by the administrator.", show_alert=True)
+            return
+        await callback.answer()
         info_text = await database.get_formatted_more_info_msg(settings)
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")]])
         await callback.message.edit_text(info_text, reply_markup=markup)

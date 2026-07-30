@@ -40,6 +40,7 @@ class Settings(Base):
     subscription_db_url = Column(Text, default=None)
     more_info_msg = Column(Text, default=None)
     clone_bot_premium_only = Column(Boolean, default=False)
+    info_button_enabled = Column(Boolean, default=True)
 
 
 
@@ -247,6 +248,10 @@ def db_init():
     if "clone_bot_premium_only" not in columns_sett:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE settings ADD COLUMN clone_bot_premium_only BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "info_button_enabled" not in columns_sett:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE settings ADD COLUMN info_button_enabled BOOLEAN DEFAULT TRUE"))
             conn.commit()
 
     # journeys columns check

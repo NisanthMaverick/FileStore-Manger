@@ -240,4 +240,12 @@ async def handle_config_callbacks(client: Client, callback: CallbackQuery, data:
         await show_bot_config(client, callback.message.chat.id, callback.message.id)
         return True
 
+    elif data == "toggle_info_button":
+        settings = await database.get_settings()
+        new_status = not settings.get("info_button_enabled", True)
+        await database.update_settings({"info_button_enabled": new_status})
+        await callback.answer(f"Info button toggled to: {'Enabled' if new_status else 'Disabled'}")
+        await show_bot_config(client, callback.message.chat.id, callback.message.id)
+        return True
+
     return False

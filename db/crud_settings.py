@@ -44,7 +44,8 @@ def _get_settings_sync():
             "lock_old_series_enabled": settings.lock_old_series_enabled,
             "lock_day_based_enabled": settings.lock_day_based_enabled,
             "subscription_db_url": settings.subscription_db_url,
-            "more_info_msg": settings.more_info_msg
+            "more_info_msg": settings.more_info_msg,
+            "info_button_enabled": settings.info_button_enabled
         }
     _SETTINGS_CACHE = result
     _SETTINGS_CACHE_EXPIRY = time.time() + SETTINGS_CACHE_TTL

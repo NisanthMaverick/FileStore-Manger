@@ -39,7 +39,8 @@ def _export_db_backup_sync() -> str:
             "lock_old_series_enabled": s.lock_old_series_enabled,
             "lock_day_based_enabled": s.lock_day_based_enabled,
             "subscription_db_url": s.subscription_db_url,
-            "more_info_msg": s.more_info_msg
+            "more_info_msg": s.more_info_msg,
+            "info_button_enabled": s.info_button_enabled
         } for s in settings_rows]
 
         # 2. Admins
@@ -151,7 +152,8 @@ def _import_db_backup_sync(json_str: str) -> bool:
                     lock_old_series_enabled=item.get("lock_old_series_enabled", True),
                     lock_day_based_enabled=item.get("lock_day_based_enabled", False),
                     subscription_db_url=item.get("subscription_db_url"),
-                    more_info_msg=item.get("more_info_msg")
+                    more_info_msg=item.get("more_info_msg"),
+                    info_button_enabled=item.get("info_button_enabled", True)
                 )
                 session.add(s)
 

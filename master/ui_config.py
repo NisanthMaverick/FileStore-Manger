@@ -26,6 +26,7 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
 
     user_send_delay = settings.get("user_send_delay", 3)
     protect_content_status = "Enabled ✅" if settings.get("protect_content_enabled") else "Disabled ❌"
+    info_button_status = "Enabled ✅" if settings.get("info_button_enabled", True) else "Disabled ❌"
     text = f"⚙️ **Bot Configurations**\n\n" \
            f"📝 **Welcome Message Template:**\n" \
            f"`{settings.get('welcome_msg')}`\n\n" \
@@ -41,6 +42,7 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
            f"▪️ End Message: {end_set}\n\n" \
            f"⏱ **User File Send Delay:** `{user_send_delay}` second(s)\n\n" \
            f"🔒 **Forward Restriction (Protect Content):** `{protect_content_status}`\n\n" \
+           f"ℹ️ **Info Button:** `{info_button_status}`\n\n" \
            f"🔘 **Custom Buttons:**\n"
     
     buttons_list = json.loads(settings.get("custom_buttons", "[]"))
@@ -64,7 +66,8 @@ async def show_bot_config(client: Client, chat_id: int, message_id: int):
             InlineKeyboardButton("⏱ User Send Delay", callback_data="edit_user_send_delay")
         ],
         [
-            InlineKeyboardButton("🔒 Forward Restricted", callback_data="toggle_protect_content")
+            InlineKeyboardButton("🔒 Forward Restricted", callback_data="toggle_protect_content"),
+            InlineKeyboardButton("ℹ️ Toggle Info Button", callback_data="toggle_info_button")
         ],
         [
             InlineKeyboardButton("🔙 Back", callback_data="main_panel")

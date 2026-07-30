@@ -168,7 +168,8 @@ async def handle_payload(client: Client, message: Message, payload: str):
         if markup:
             full_markup = list(markup.inline_keyboard)
         full_markup.append([InlineKeyboardButton("🎬 Browse Series / Categories", callback_data="cl_browse_series_0")])
-        full_markup.append([InlineKeyboardButton("ℹ️ Info", callback_data="cl_user_more_info")])
+        if settings.get("info_button_enabled", True):
+            full_markup.append([InlineKeyboardButton("ℹ️ Info", callback_data="cl_user_more_info")])
         
         await message.reply_text(welcome_text, reply_markup=InlineKeyboardMarkup(full_markup))
 
@@ -233,6 +234,9 @@ async def clone_info_handler(client: Client, message: Message):
         await send_clone_access_denied(client, message)
         return
     settings = await database.get_settings()
+    if not settings.get("info_button_enabled", True):
+        await message.reply_text("❌ This feature is disabled by the administrator.")
+        return
     info_text = await database.get_formatted_more_info_msg(settings)
     markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back Home", callback_data="cl_welcome_home")]])
     await message.reply_text(info_text, reply_markup=markup)
