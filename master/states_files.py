@@ -211,10 +211,11 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         await message.reply_text(f"✅ Journey renamed to '{name}' successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
         return True
 
-    # 2.65 Waiting for Journey Description (Edit)
+    # 2.65 Waiting for Journey Description Edit
     elif state == "waiting_for_journey_description_edit":
-        journey_id = state_data["data"]["journey_id"]
         description = message.text.strip()
+        journey_id = state_data["data"]["journey_id"]
+        return_to = state_data["data"].get("return_to")
         if description.lower() == "none":
             description = ""
             
@@ -222,6 +223,17 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         ADMIN_STATES.pop(user_id, None)
         await log_admin_action(f"📝 **Journey Description Updated**: (ID: {journey_id}) by {message.from_user.mention}")
         
+        if return_to == "library_msg":
+            from .ui_files import show_edit_library_message_menu
+            if message_id:
+                try:
+                    await show_edit_library_message_menu(client, message.chat.id, message_id)
+                    return True
+                except Exception:
+                    pass
+            await message.reply_text(f"✅ Journey description updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="edit_library_msg_opt")]]))
+            return True
+            
         from .ui_files import show_journey_detail
         if message_id:
             try:

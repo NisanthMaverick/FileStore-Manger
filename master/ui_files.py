@@ -715,3 +715,43 @@ async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, s
     except Exception as e:
         print(f"Error rendering show_move_folder_menu: {e}")
 
+
+async def show_edit_library_message_menu(client: Client, chat_id: int, message_id: int):
+    """Show the menu allowing choice between editing global welcome message or journey descriptions."""
+    journeys = await database.list_journeys()
+    settings = await database.get_settings()
+    library_msg = settings.get("series_library_custom_msg")
+    library_msg_status = f"`{library_msg[:60]}...`" if library_msg else "_Default (None)_ ⚠️"
+    
+    text = (
+        "💬 **Library Message & Descriptions Manager**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📝 **Global Welcome Message:**\n{library_msg_status}\n\n"
+        "Choose what you want to edit below. Selecting a journey/category allows you to edit its description directly, which will show under its heading in Clone Bots:\n\n"
+    )
+    
+    buttons = [
+        [
+            InlineKeyboardButton("💬 Edit Global Welcome Message", callback_data="edit_global_library_welcome_msg")
+        ]
+    ]
+    
+    for j in journeys:
+        desc_preview = f" ({j.get('description', '')[:25]}...)" if j.get('description') else " (No Description)"
+        buttons.append([
+            InlineKeyboardButton(f"🗺️ {j['name']}{desc_preview}", callback_data=f"edit_journey_desc_lib_{j['id']}")
+        ])
+        
+    buttons.append([
+        InlineKeyboardButton("🔙 Back", callback_data="manage_series")
+    ])
+    
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id, message_id=message_id,
+            text=text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        print(f"Error rendering show_edit_library_message_menu: {e}")
+
+

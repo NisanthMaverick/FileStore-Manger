@@ -9,7 +9,7 @@ from .ui_files import (
     show_folder_management, show_series_browse, show_manage_series, show_filesec_actions,
     show_series_management_menu, show_series_reorder_menu,
     show_journey_detail, show_manage_series_journey, show_journey_lock_settings,
-    show_journey_active_series_config
+    show_journey_active_series_config, show_edit_library_message_menu
 )
 from .ui_config import show_auto_delete_menu
 
@@ -510,13 +510,37 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
 
     elif data == "edit_library_msg_opt":
         await callback.answer()
+        await show_edit_library_message_menu(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "edit_global_library_welcome_msg":
+        await callback.answer()
         ADMIN_STATES[user_id] = {"state": "waiting_for_library_welcome_msg", "message_id": callback.message.id}
         await callback.message.edit_text(
-            "💬 **Edit Library Welcome Message**\n\n"
+            "💬 **Edit Global Welcome Message**\n\n"
             "Send the custom welcome message to display at the top of the categories/journey list page in Clone Bots.\n\n"
             "Send `none` to disable/reset to default.\n\n"
             "❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="manage_series")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="edit_library_msg_opt")]])
+        )
+        return True
+
+    elif data.startswith("edit_journey_desc_lib_"):
+        journey_id = int(data.split("_")[4])
+        await callback.answer()
+        j = await database.get_journey(journey_id)
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_journey_description_edit",
+            "message_id": callback.message.id,
+            "data": {"journey_id": journey_id, "return_to": "library_msg"}
+        }
+        await callback.message.edit_text(
+            f"📝 **Edit Description: {j['name']}**\n\n"
+            "Please send the new description for this category/journey.\n"
+            "This description will display below the heading in the series list/category screen.\n\n"
+            "Send `none` to clear the description.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="edit_library_msg_opt")]])
         )
         return True
 
