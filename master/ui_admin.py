@@ -403,3 +403,139 @@ async def show_journey_db_channels(client: Client, chat_id: int, message_id: int
         )
     except Exception as e:
         print(f"Error rendering journey_db_channels: {e}")
+
+
+async def show_bot_stats_selection(client: Client, chat_id: int, message_id: int):
+    """Show a selection menu: pick a specific clone bot or all clone bots for stats."""
+    bots = await database.get_clone_bots()
+    
+    text = (
+        "📊 **Bot Statistics — Select Target**\n\n"
+        "Choose a clone bot to view its statistics, or select **All Clone Bots** for an aggregated overview.\n\n"
+        f"🤖 Registered Clone Bots: **{len(bots)}**"
+    )
+    
+    buttons = []
+    for b in bots:
+        status_icon = "🟢" if b["is_active"] else "🔴"
+        buttons.append([
+            InlineKeyboardButton(
+                f"{status_icon} {b['name']} (@{b['username']})",
+                callback_data=f"bot_stats_{b['username']}"
+            )
+        ])
+    
+    buttons.append([
+        InlineKeyboardButton("🌐 All Clone Bots (Overview)", callback_data="bot_stats_all")
+    ])
+    buttons.append([
+        InlineKeyboardButton("🔙 Back", callback_data="admin_settings")
+    ])
+    
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id, message_id=message_id,
+            text=text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        print(f"Error rendering bot_stats_selection: {e}")
+
+
+async def show_bot_stats_report(client: Client, chat_id: int, message_id: int, target_username: str = None):
+    """Fetch and display the full stats report for a specific bot or all bots."""
+    from datetime import datetime, timezone
+    import pytz
+
+    bots = await database.get_clone_bots()
+    stats = await database.get_db_stats()
+    
+    # Format helpers
+    fmt_num = lambda n: f"{n:,}"
+    db_size_str = database.format_bytes(stats.get("db_size_bytes"))
+    now_str = datetime.now().strftime("%d %b %Y, %I:%M %p")
+    
+    total_files     = fmt_num(stats["total_files"])
+    total_folders   = fmt_num(stats["total_folders"])
+    perm_links      = fmt_num(stats["permanent_links"])
+    total_series    = stats["total_series"]
+    active_series   = stats["active_series"]
+    old_series      = stats["old_series"]
+    total_journeys  = stats["total_journeys"]
+    total_users     = fmt_num(stats["total_users"])
+    total_subs      = fmt_num(stats["total_subscribers"])
+    total_premium   = fmt_num(stats["total_premium"])
+    db_status       = stats["db_status"]
+    
+    if target_username == "all" or target_username is None:
+        # Aggregated overview for all clone bots
+        total_bots  = stats["total_clone_bots"]
+        active_bots = stats["active_clone_bots"]
+        
+        text = (
+            "🌐 **All Clone Bots — Overview**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🤖 **Total Clone Bots:** {total_bots} ({active_bots} Active)\n"
+            f"👥 **Total Users:** {total_users}\n"
+            f"🔄 **Subscribers:** {total_subs}\n"
+            f"⭐ **Premium Users:** {total_premium}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📊 **Database Storage**\n"
+            f"• 💾 DB Size Used: `{db_size_str}`\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📁 **Content Library**\n"
+            f"• 📂 Total Files: `{total_files}`\n"
+            f"• 🗂️ Total Folders: `{total_folders}`\n"
+            f"• 🔗 Permanent Links: `{perm_links}`\n"
+            f"• 🎬 Series: `{total_series}` (Active: {active_series} | Old: {old_series})\n"
+            f"• 🗺️ Journeys: `{total_journeys}`\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 **Report Time:** {now_str}\n"
+            f"🟢 **Overall Status:** {db_status}"
+        )
+    else:
+        # Stats for a specific clone bot
+        bot = next((b for b in bots if b["username"] == target_username), None)
+        if not bot:
+            text = f"❌ Clone bot `@{target_username}` not found in records."
+        else:
+            status_icon = "🟢 Active" if bot["is_active"] else "🔴 Inactive"
+            settings = await database.get_settings()
+            primary = settings.get("primary_clone_username", "")
+            primary_label = " ⭐ Primary" if bot["username"] == primary else ""
+            
+            text = (
+                f"🤖 **Clone Bot Statistics**\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🤖 **Bot Name:** {bot['name']}{primary_label}\n"
+                f"👤 **Username:** @{bot['username']}\n"
+                f"⚡ **Status:** {status_icon}\n\n"
+                f"👥 **Total Users:** {total_users}\n"
+                f"🔄 **Subscribers:** {total_subs}\n"
+                f"⭐ **Premium Users:** {total_premium}\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "📊 **Database Storage**\n"
+                f"• 💾 DB Size Used: `{db_size_str}`\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "📁 **Content Library** _(Shared Across All Bots)_\n"
+                f"• 📂 Total Files: `{total_files}`\n"
+                f"• 🗂️ Total Folders: `{total_folders}`\n"
+                f"• 🔗 Permanent Links: `{perm_links}`\n"
+                f"• 🎬 Series: `{total_series}` (Active: {active_series} | Old: {old_series})\n"
+                f"• 🗺️ Journeys: `{total_journeys}`\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📅 **Report Time:** {now_str}\n"
+                f"🟢 **Database Status:** {db_status}"
+            )
+    
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Refresh", callback_data=f"bot_stats_{'all' if target_username in ('all', None) else target_username}")],
+        [InlineKeyboardButton("🔙 Back to Selection", callback_data="show_bot_stats")]
+    ])
+    
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id, message_id=message_id,
+            text=text, reply_markup=markup
+        )
+    except Exception as e:
+        print(f"Error rendering bot_stats_report: {e}")

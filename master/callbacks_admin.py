@@ -12,7 +12,8 @@ from .ui_admin import (
     show_db_sync, show_manage_clones, show_mgr_admins, show_backup_menu,
     get_manage_clones_markup, get_bot_details_markup, show_bot_details, show_sub_mgr,
     show_remove_subscriber_menu, show_lock_settings, show_active_series_config,
-    show_premium_users_panel, show_journey_db_channels
+    show_premium_users_panel, show_journey_db_channels,
+    show_bot_stats_selection, show_bot_stats_report
 )
 from clones.tree import start_clone_bot, stop_clone_bot
 
@@ -400,6 +401,9 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
                 InlineKeyboardButton(f"🤖 Clone Creation: {add_bot_status_str}", callback_data="toggle_add_bot_mode")
             ],
             [
+                InlineKeyboardButton("📊 Bot & DB Statistics", callback_data="show_bot_stats")
+            ],
+            [
                 InlineKeyboardButton("🔙 Back Panel", callback_data="main_panel")
             ]
         ])
@@ -423,10 +427,29 @@ async def handle_admin_callbacks(client: Client, callback: CallbackQuery, data: 
                 InlineKeyboardButton(f"🤖 Clone Creation: {add_bot_status_str}", callback_data="toggle_add_bot_mode")
             ],
             [
+                InlineKeyboardButton("📊 Bot & DB Statistics", callback_data="show_bot_stats")
+            ],
+            [
                 InlineKeyboardButton("🔙 Back Panel", callback_data="main_panel")
             ]
         ])
         await callback.message.edit_text(text, reply_markup=markup)
+        return True
+
+    elif data == "show_bot_stats":
+        await callback.answer()
+        await show_bot_stats_selection(client, callback.message.chat.id, callback.message.id)
+        return True
+
+    elif data == "bot_stats_all":
+        await callback.answer("⏳ Fetching statistics...")
+        await show_bot_stats_report(client, callback.message.chat.id, callback.message.id, target_username="all")
+        return True
+
+    elif data.startswith("bot_stats_"):
+        target = data[len("bot_stats_"):]
+        await callback.answer("⏳ Fetching statistics...")
+        await show_bot_stats_report(client, callback.message.chat.id, callback.message.id, target_username=target)
         return True
 
     elif data == "mgr_admins":

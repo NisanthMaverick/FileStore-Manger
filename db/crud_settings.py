@@ -492,3 +492,79 @@ async def get_remote_channels():
     return await asyncio.to_thread(_get_remote_channels_sync)
 
 
+# --- Bot / DB Statistics ---
+def _get_db_stats_sync() -> dict:
+    """Gather comprehensive database statistics for the stats report."""
+    from .models import engine, Series, SeriesSection, FileRecord, Journey
+    from sqlalchemy import func, text as sa_text
+    
+    with SessionLocal() as session:
+        total_users = session.query(User).count()
+        total_subscribers = session.query(Subscriber).count()
+        total_premium = session.query(RemotePremiumCache).count()
+        total_clone_bots = session.query(CloneBot).count()
+        active_clone_bots = session.query(CloneBot).filter(CloneBot.is_active == True).count()
+        
+        total_files = session.query(FileRecord).count()
+        total_file_size_bytes = session.query(func.sum(FileRecord.file_size)).scalar() or 0
+        total_folders = session.query(SeriesSection).count()
+        total_series = session.query(Series).count()
+        active_series = session.query(Series).filter(Series.is_active == True).count()
+        old_series = session.query(Series).filter(Series.is_active == False).count()
+        total_journeys = session.query(Journey).count()
+        
+        # Try to get DB size from PostgreSQL
+        db_size_bytes = None
+        db_status = "Healthy ✅"
+        try:
+            result = session.execute(sa_text("SELECT pg_database_size(current_database())"))
+            db_size_bytes = result.scalar()
+        except Exception:
+            # Fallback: try SQLite
+            try:
+                import os
+                db_url = str(engine.url)
+                if db_url.startswith("sqlite"):
+                    db_path = db_url.replace("sqlite:///", "").replace("sqlite://", "")
+                    db_size_bytes = os.path.getsize(db_path) if os.path.exists(db_path) else None
+            except Exception:
+                db_size_bytes = None
+        
+        return {
+            "total_users": total_users,
+            "total_subscribers": total_subscribers,
+            "total_premium": total_premium,
+            "total_clone_bots": total_clone_bots,
+            "active_clone_bots": active_clone_bots,
+            "total_files": total_files,
+            "total_file_size_bytes": total_file_size_bytes,
+            "total_folders": total_folders,
+            "total_series": total_series,
+            "active_series": active_series,
+            "old_series": old_series,
+            "total_journeys": total_journeys,
+            "permanent_links": total_files,  # each file has a unique file_code = permanent link
+            "db_size_bytes": db_size_bytes,
+            "db_status": db_status,
+        }
+
+
+def _format_bytes(size_bytes: int) -> str:
+    """Convert bytes to human-readable size string."""
+    if size_bytes is None:
+        return "N/A"
+    if size_bytes >= 1024 ** 3:
+        return f"{size_bytes / (1024 ** 3):.2f} GB"
+    elif size_bytes >= 1024 ** 2:
+        return f"{size_bytes / (1024 ** 2):.2f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    return f"{size_bytes} B"
+
+
+async def get_db_stats() -> dict:
+    return await asyncio.to_thread(_get_db_stats_sync)
+
+
+def format_bytes(size_bytes: int) -> str:
+    return _format_bytes(size_bytes)
