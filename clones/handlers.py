@@ -80,7 +80,16 @@ async def clone_explore_handler(client: Client, message: Message):
         await send_clone_access_denied(client, message)
         return
     journeys = await database.list_journeys()
-    text = "🏞️ **Home**\nChoose a category:\n\n"
+    settings = await database.get_settings()
+    library_msg = settings.get("series_library_custom_msg")
+    if library_msg and library_msg.strip():
+        text = library_msg
+        if not text.endswith("\n\n") and not text.endswith("\n"):
+            text += "\n\n"
+        elif text.endswith("\n") and not text.endswith("\n\n"):
+            text += "\n"
+    else:
+        text = "🏞️ **Home**\nChoose a category:\n\n"
     buttons = []
     
     sliced_list = journeys[0:5]

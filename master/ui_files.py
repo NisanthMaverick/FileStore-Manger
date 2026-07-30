@@ -248,8 +248,14 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
 
 async def show_manage_series(client: Client, chat_id: int, message_id: int, skip: int = 0):
     journeys = await database.list_journeys()
+    settings = await database.get_settings()
+    library_msg = settings.get("series_library_custom_msg")
+    library_msg_status = library_msg if library_msg else "Default (None)"
+    
     limit = 5
-    text = "🗺️ **Journeys & Categories Library**\n\nSelect a journey/category to manage its series and access controls:\n\n"
+    text = "🗺️ **Journeys & Categories Library**\n\n" \
+           f"💬 **Library Welcome Msg:**\n`{library_msg_status}`\n\n" \
+           "Select a journey/category to manage its series and access controls:\n\n"
     buttons = []
     
     sliced_list = journeys[skip:skip+limit]
@@ -271,7 +277,8 @@ async def show_manage_series(client: Client, chat_id: int, message_id: int, skip
         buttons.append(pag_row)
         
     buttons.append([
-        InlineKeyboardButton("➕ Create Journey", callback_data="create_journey_opt")
+        InlineKeyboardButton("➕ Create Journey", callback_data="create_journey_opt"),
+        InlineKeyboardButton("💬 Message", callback_data="edit_library_msg_opt")
     ])
     buttons.append(get_back_button("main_panel"))
     try:

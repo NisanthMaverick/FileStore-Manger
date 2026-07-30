@@ -232,6 +232,26 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
         await message.reply_text(f"✅ Journey description updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
         return True
 
+    # 2.66 Waiting for Library Welcome Message
+    elif state == "waiting_for_library_welcome_msg":
+        welcome = message.text.strip()
+        if welcome.lower() == "none":
+            welcome = ""
+            
+        await database.update_settings({"series_library_custom_msg": welcome})
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"💬 **Library Welcome Message Updated** by {message.from_user.mention}")
+        
+        from .ui_files import show_manage_series
+        if message_id:
+            try:
+                await show_manage_series(client, message.chat.id, message_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Library welcome message updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Library", callback_data="manage_series")]]))
+        return True
+
     # 2.7 Waiting for Series Title (in Journey)
     elif state == "waiting_for_series_title_j":
         title = message.text.strip()

@@ -277,11 +277,14 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         limit = settings.get("series_buttons_per_page", 5)
         library_msg = settings.get("series_library_custom_msg")
-        header = "🏞️ **Home**\nChoose a category:\n\n"
-        if library_msg:
-            text = f"{library_msg}\n\n{header}"
+        if library_msg and library_msg.strip():
+            text = library_msg
+            if not text.endswith("\n\n") and not text.endswith("\n"):
+                text += "\n\n"
+            elif text.endswith("\n") and not text.endswith("\n\n"):
+                text += "\n"
         else:
-            text = header
+            text = "🏞️ **Home**\nChoose a category:\n\n"
             
         buttons = []
         
@@ -364,7 +367,11 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             return
 
         limit = settings.get("series_buttons_per_page", 5)
-        text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside {journey['name']} to browse series:\n\n"
+        desc = journey.get("description")
+        if desc and desc.strip():
+            text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n{desc}\n\n📁 Go inside to browse series:\n\n"
+        else:
+            text = f"🗺️ **Home › {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n📁 Go inside {journey['name']} to browse series:\n\n"
         buttons = []
         
         sliced_list = series_list[skip:skip+limit]

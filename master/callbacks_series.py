@@ -508,6 +508,18 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         )
         return True
 
+    elif data == "edit_library_msg_opt":
+        await callback.answer()
+        ADMIN_STATES[user_id] = {"state": "waiting_for_library_welcome_msg", "message_id": callback.message.id}
+        await callback.message.edit_text(
+            "💬 **Edit Library Welcome Message**\n\n"
+            "Send the custom welcome message to display at the top of the categories/journey list page in Clone Bots.\n\n"
+            "Send `none` to disable/reset to default.\n\n"
+            "❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="manage_series")]])
+        )
+        return True
+
     elif data.startswith("rename_journey_opt_"):
         journey_id = int(data.split("_")[3])
         await callback.answer()
