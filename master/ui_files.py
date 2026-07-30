@@ -79,27 +79,21 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         name = format_sec_name_inline(current_sec["name"])
         custom_msg = current_sec.get("custom_msg")
         buttons_per_row = current_sec.get("buttons_per_row", 2)
-        custom_pic = current_sec.get("custom_pic")
         type_str = "Folder"
 
     custom_msg_status = custom_msg if custom_msg else "Default (Breadcrumbs / Description)"
-    custom_pic_status = "Enabled ✅" if custom_pic else "Disabled ❌"
     is_locked_val = series.get("is_locked", False) if is_root else current_sec.get("is_locked", False)
     locked_status_str = "Enabled 🔒 (Premium Required)" if is_locked_val else "Disabled 🔓"
     
     text = (
         f"⚙️ **{type_str} Settings: {name}**\n\n"
         f"💬 **Custom Message:**\n`{custom_msg_status}`\n\n"
-        f"🖼 **Custom Picture:** `{custom_pic_status}`\n\n"
         f"🔢 **Buttons per Row:** `{buttons_per_row}`\n\n"
         f"🔒 **Individual Lock:** `{locked_status_str}`\n\n"
         "Configure folder settings or perform administrative actions below:"
     )
 
     buttons_list = [
-        [
-            InlineKeyboardButton("🖼 Custom Picture", callback_data=f"edit_sec_pic_{series_id}_{section_id}_{library_skip}")
-        ],
         [
             InlineKeyboardButton("💬 Edit Message", callback_data=f"edit_sec_msg_{series_id}_{section_id}_{library_skip}"),
             InlineKeyboardButton("🔢 Buttons Per Row", callback_data=f"edit_sec_cols_{series_id}_{section_id}_{library_skip}")
@@ -161,10 +155,8 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
 
     if section_id:
         custom_msg = current_sec.get("custom_msg") if current_sec else None
-        custom_pic = current_sec.get("custom_pic") if current_sec else None
     else:
         custom_msg = series.get("custom_msg")
-        custom_pic = series.get("custom_pic")
 
     if custom_msg and custom_msg.strip():
         text = custom_msg
@@ -232,52 +224,27 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
             buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"manage_series_skip_{library_skip}")])
 
     markup = InlineKeyboardMarkup(buttons)
-    if custom_pic:
-        from pyrogram.types import InputMediaPhoto
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=markup
+        )
+    except Exception as e:
+        print(f"Error editing message text in show_series_browse: {e}")
         try:
-            await client.edit_message_media(
-                chat_id=chat_id,
-                message_id=message_id,
-                media=InputMediaPhoto(custom_pic, caption=text),
-                reply_markup=markup
-            )
-        except Exception as e:
-            print(f"Error editing message media in show_series_browse: {e}")
-            try:
-                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
-            except Exception as del_err:
-                print(f"Error deleting message in show_series_browse: {del_err}")
-            try:
-                await client.send_photo(
-                    chat_id=chat_id,
-                    photo=custom_pic,
-                    caption=text,
-                    reply_markup=markup
-                )
-            except Exception as e:
-                print(f"Error sending photo in show_series_browse: {e}")
-    else:
+            await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+        except Exception as del_err:
+            print(f"Error deleting message in show_series_browse: {del_err}")
         try:
-            await client.edit_message_text(
+            await client.send_message(
                 chat_id=chat_id,
-                message_id=message_id,
                 text=text,
                 reply_markup=markup
             )
         except Exception as e:
-            print(f"Error editing message text in show_series_browse: {e}")
-            try:
-                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
-            except Exception as del_err:
-                print(f"Error deleting message in show_series_browse: {del_err}")
-            try:
-                await client.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=markup
-                )
-            except Exception as e:
-                print(f"Error sending text in show_series_browse: {e}")
+            print(f"Error sending text in show_series_browse: {e}")
 
 async def show_manage_series(client: Client, chat_id: int, message_id: int, skip: int = 0):
     journeys = await database.list_journeys()

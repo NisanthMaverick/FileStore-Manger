@@ -154,17 +154,14 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         return
 
     custom_msg = None
-    custom_pic = None
     per_row = 2
 
     if section_id:
         if current_sec:
             custom_msg = current_sec.get("custom_msg")
-            custom_pic = current_sec.get("custom_pic")
             per_row = current_sec.get("buttons_per_row", 2)
     else:
         custom_msg = series.get("custom_msg")
-        custom_pic = series.get("custom_pic")
         per_row = series.get("buttons_per_row", 2)
 
     if custom_msg and custom_msg.strip():
@@ -260,52 +257,26 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"cl_journey_{series['journey_id'] or 0}_{library_skip}")])
 
     markup = InlineKeyboardMarkup(buttons)
-    if custom_pic:
-        from pyrogram.types import InputMediaPhoto
-        if is_new_message:
-            try:
-                await client.send_photo(chat_id=chat_id, photo=custom_pic, caption=text, reply_markup=markup)
-            except Exception as e:
-                print(f"Error sending photo in show_user_tree: {e}")
-        else:
-            try:
-                await client.edit_message_media(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    media=InputMediaPhoto(custom_pic, caption=text),
-                    reply_markup=markup
-                )
-            except Exception as e:
-                print(f"Error editing message media in show_user_tree: {e}")
-                try:
-                    await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
-                except Exception as del_err:
-                    print(f"Error deleting message in show_user_tree: {del_err}")
-                try:
-                    await client.send_photo(chat_id=chat_id, photo=custom_pic, caption=text, reply_markup=markup)
-                except Exception as e:
-                    print(f"Error sending photo in show_user_tree: {e}")
+    if is_new_message:
+        try:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+        except Exception as e:
+            print(f"Error sending text in show_user_tree: {e}")
     else:
-        if is_new_message:
+        try:
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=markup
+            )
+        except Exception as e:
+            print(f"Error editing message text in show_user_tree: {e}")
+            try:
+                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+            except Exception as del_err:
+                print(f"Error deleting message in show_user_tree: {del_err}")
             try:
                 await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
             except Exception as e:
                 print(f"Error sending text in show_user_tree: {e}")
-        else:
-            try:
-                await client.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=text,
-                    reply_markup=markup
-                )
-            except Exception as e:
-                print(f"Error editing message text in show_user_tree: {e}")
-                try:
-                    await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
-                except Exception as del_err:
-                    print(f"Error deleting message in show_user_tree: {del_err}")
-                try:
-                    await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-                except Exception as e:
-                    print(f"Error sending text in show_user_tree: {e}")

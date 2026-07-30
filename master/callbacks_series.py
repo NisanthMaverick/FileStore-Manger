@@ -141,19 +141,6 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         )
         return True
 
-    elif data.startswith("edit_sec_pic_"):
-        parts = data.split("_")
-        series_id = int(parts[3])
-        section_id = int(parts[4])
-        library_skip = int(parts[5]) if len(parts) > 5 else 0
-        await callback.answer()
-        ADMIN_STATES[user_id] = {"state": "waiting_for_folder_pic", "message_id": callback.message.id, "data": {"series_id": series_id, "section_id": section_id, "library_skip": library_skip}}
-        await callback.message.edit_text(
-            "🖼 **Edit Custom Picture**\n\nUpload a picture/photo to be shown in this folder/section browse view. Send `none` to disable/remove the custom picture.\n\n❌ Send `/cancel` to abort.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="tree_cancel_btn")]])
-        )
-        return True
-
     elif data.startswith("edit_sec_cols_"):
         parts = data.split("_")
         series_id = int(parts[3])
