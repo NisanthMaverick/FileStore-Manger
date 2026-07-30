@@ -277,7 +277,7 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
 
         limit = settings.get("series_buttons_per_page", 5)
         library_msg = settings.get("series_library_custom_msg")
-        header = "🗺️ **Home**\n━━━━━━━━━━━━━━━━━━━━\n\nSelect a category/journey to explore:\n\n"
+        header = "🏞️ **Home**\nChoose a category:\n\n"
         if library_msg:
             text = f"{library_msg}\n\n{header}"
         else:
@@ -291,12 +291,15 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
         else:
             row = []
             for j in sliced_list:
-                text += f"▪️ **{j['name']}**\n"
+                text += f"**{j['name']}**\n"
+                desc = j.get("description")
+                if desc and desc.strip():
+                    text += f"{desc}\n"
+                text += "\n"
+                
                 is_j_locked = j.get("is_locked", False) and not is_user_premium
-                if is_j_locked:
-                    row.append(InlineKeyboardButton(f"🔒 {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
-                else:
-                    row.append(InlineKeyboardButton(f"🗺️ View {j['name']}", callback_data=f"cl_journey_{j['id']}_0"))
+                btn_label = f"🔒 {j['name']}" if is_j_locked else j['name']
+                row.append(InlineKeyboardButton(btn_label, callback_data=f"cl_journey_{j['id']}_0"))
                 if len(row) == 2:
                     buttons.append(row)
                     row = []

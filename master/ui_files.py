@@ -295,8 +295,10 @@ async def show_journey_detail(client: Client, chat_id: int, message_id: int, jou
     db_channel = journey.get("db_channel_id")
     db_status = f"`{db_channel}`" if db_channel else "_Default Settings Fallback_ ⚠️"
     
+    desc = journey.get("description") or "_No description set._"
     text = (
         f"🗺️ **Journey Details: {journey['name']}**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📝 **Description:**\n{desc}\n\n"
         f"🔒 **Access Control Summary:**\n"
         f"• **Master Switch:** {lock_status}\n"
         f"• **Lock Active Series:** {active_lock}\n"
@@ -318,6 +320,9 @@ async def show_journey_detail(client: Client, chat_id: int, message_id: int, jou
         ],
         [
             InlineKeyboardButton("✏️ Rename Journey", callback_data=f"rename_journey_opt_{journey_id}"),
+            InlineKeyboardButton("📝 Edit Description", callback_data=f"edit_journey_desc_opt_{journey_id}")
+        ],
+        [
             InlineKeyboardButton("🗑 Delete Journey", callback_data=f"delete_journey_opt_{journey_id}")
         ],
         [

@@ -518,6 +518,20 @@ async def handle_series_callbacks(client: Client, callback: CallbackQuery, data:
         )
         return True
 
+    elif data.startswith("edit_journey_desc_opt_"):
+        journey_id = int(data.split("_")[4])
+        await callback.answer()
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_journey_description_edit",
+            "message_id": callback.message.id,
+            "data": {"journey_id": journey_id}
+        }
+        await callback.message.edit_text(
+            "📝 **Edit Journey Description**\n\nPlease enter the new description for this category/journey.\nSend `none` to clear the description.\n\n❌ Send `/cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data=f"manage_journey_{journey_id}")]])
+        )
+        return True
+
     elif data.startswith("delete_journey_opt_"):
         journey_id = int(data.split("_")[3])
         await callback.answer()

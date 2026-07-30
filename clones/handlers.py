@@ -80,16 +80,31 @@ async def clone_explore_handler(client: Client, message: Message):
         await send_clone_access_denied(client, message)
         return
     journeys = await database.list_journeys()
-    text = "🗺️ **Browse Categories & Journeys**\n\nSelect a category/journey to explore:\n\n"
+    text = "🏞️ **Home**\nChoose a category:\n\n"
     buttons = []
     
     sliced_list = journeys[0:5]
     if not sliced_list:
         text += "_No journeys available._"
     else:
+        from config import OWNER_ID
+        is_user_premium = await database.is_premium_user(user_id, OWNER_ID)
+        row = []
         for j in sliced_list:
-            text += f"▪️ **{j['name']}**\n"
-            buttons.append([InlineKeyboardButton(f"🗺️ View {j['name'][:25]}", callback_data=f"cl_journey_{j['id']}_0")])
+            text += f"**{j['name']}**\n"
+            desc = j.get("description")
+            if desc and desc.strip():
+                text += f"{desc}\n"
+            text += "\n"
+            
+            is_j_locked = j.get("is_locked", False) and not is_user_premium
+            btn_label = f"🔒 {j['name']}" if is_j_locked else j['name']
+            row.append(InlineKeyboardButton(btn_label, callback_data=f"cl_journey_{j['id']}_0"))
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
     
     pag_row = []
     if len(journeys) > 5:

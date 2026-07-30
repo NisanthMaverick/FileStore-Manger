@@ -157,7 +157,25 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             await message.reply_text("⚠️ Journey name cannot be empty. Try again or send /cancel.")
             return True
         
-        journey_id = await database.create_journey(name)
+        ADMIN_STATES[user_id] = {
+            "state": "waiting_for_journey_description",
+            "message_id": message_id,
+            "data": {"name": name}
+        }
+        await message.reply_text(
+            f"📝 **Category Description**\n\nPlease enter a **Description** for the category/journey '{name}':\n\nType `/skip` or `none` to create it without a description.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="manage_series")]])
+        )
+        return True
+
+    # 2.55 Waiting for Journey Description (during creation)
+    elif state == "waiting_for_journey_description":
+        name = state_data["data"]["name"]
+        description = message.text.strip()
+        if description.lower() in ["/skip", "none"]:
+            description = ""
+            
+        journey_id = await database.create_journey(name, description)
         ADMIN_STATES.pop(user_id, None)
         await log_admin_action(f"🗺️ **Journey Created**: {name} (ID: {journey_id}) by {message.from_user.mention}")
         
@@ -191,6 +209,27 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             except Exception:
                 pass
         await message.reply_text(f"✅ Journey renamed to '{name}' successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
+        return True
+
+    # 2.65 Waiting for Journey Description (Edit)
+    elif state == "waiting_for_journey_description_edit":
+        journey_id = state_data["data"]["journey_id"]
+        description = message.text.strip()
+        if description.lower() == "none":
+            description = ""
+            
+        await database.update_journey_settings(journey_id, description=description)
+        ADMIN_STATES.pop(user_id, None)
+        await log_admin_action(f"📝 **Journey Description Updated**: (ID: {journey_id}) by {message.from_user.mention}")
+        
+        from .ui_files import show_journey_detail
+        if message_id:
+            try:
+                await show_journey_detail(client, message.chat.id, message_id, journey_id)
+                return True
+            except Exception:
+                pass
+        await message.reply_text(f"✅ Journey description updated successfully!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Journey", callback_data=f"manage_journey_{journey_id}")]]))
         return True
 
     # 2.7 Waiting for Series Title (in Journey)

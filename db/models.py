@@ -56,6 +56,7 @@ class Journey(Base):
     __tablename__ = "journeys"
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
+    description = Column(Text, default="")
     lock_buttons_enabled = Column(Boolean, default=False)
     lock_active_series_enabled = Column(Boolean, default=False)
     lock_old_series_enabled = Column(Boolean, default=True)
@@ -263,6 +264,10 @@ def db_init():
     if "is_locked" not in columns_journeys:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE journeys ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+    if "description" not in columns_journeys:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE journeys ADD COLUMN description TEXT DEFAULT ''"))
             conn.commit()
 
 
