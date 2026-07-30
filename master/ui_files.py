@@ -235,11 +235,12 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
                 media=InputMediaPhoto(custom_pic, caption=text),
                 reply_markup=markup
             )
-        except Exception:
+        except Exception as e:
+            print(f"Error editing message media in show_series_browse: {e}")
             try:
-                await client.delete_messages(chat_id=chat_id, message_ids=message_id)
-            except Exception:
-                pass
+                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+            except Exception as del_err:
+                print(f"Error deleting message in show_series_browse: {del_err}")
             try:
                 await client.send_photo(
                     chat_id=chat_id,
@@ -257,11 +258,12 @@ async def show_series_browse(client: Client, chat_id: int, message_id: int, seri
                 text=text,
                 reply_markup=markup
             )
-        except Exception:
+        except Exception as e:
+            print(f"Error editing message text in show_series_browse: {e}")
             try:
-                await client.delete_messages(chat_id=chat_id, message_ids=message_id)
-            except Exception:
-                pass
+                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+            except Exception as del_err:
+                print(f"Error deleting message in show_series_browse: {del_err}")
             try:
                 await client.send_message(
                     chat_id=chat_id,

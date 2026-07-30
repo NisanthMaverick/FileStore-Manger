@@ -275,11 +275,12 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                     media=InputMediaPhoto(custom_pic, caption=text),
                     reply_markup=markup
                 )
-            except Exception:
+            except Exception as e:
+                print(f"Error editing message media in show_user_tree: {e}")
                 try:
-                    await client.delete_messages(chat_id=chat_id, message_ids=message_id)
-                except Exception:
-                    pass
+                    await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+                except Exception as del_err:
+                    print(f"Error deleting message in show_user_tree: {del_err}")
                 try:
                     await client.send_photo(chat_id=chat_id, photo=custom_pic, caption=text, reply_markup=markup)
                 except Exception as e:
@@ -298,11 +299,12 @@ async def show_user_tree(client: Client, chat_id: int, message_id: int, series_i
                     text=text,
                     reply_markup=markup
                 )
-            except Exception:
+            except Exception as e:
+                print(f"Error editing message text in show_user_tree: {e}")
                 try:
-                    await client.delete_messages(chat_id=chat_id, message_ids=message_id)
-                except Exception:
-                    pass
+                    await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+                except Exception as del_err:
+                    print(f"Error deleting message in show_user_tree: {del_err}")
                 try:
                     await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
                 except Exception as e:

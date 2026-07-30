@@ -470,7 +470,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             ADMIN_STATES.pop(user_id, None)
             if message_id:
                 try:
-                    await client.delete_messages(chat_id=message.chat.id, message_ids=message_id)
+                    await client.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
                 except Exception:
                     pass
             await show_folder_management(client, message.chat.id, None, series_id, section_id, library_skip=library_skip)
@@ -484,7 +484,7 @@ async def handle_files_states(client: Client, message: Message, state: str, stat
             ADMIN_STATES.pop(user_id, None)
             if message_id:
                 try:
-                    await client.delete_messages(chat_id=message.chat.id, message_ids=message_id)
+                    await client.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
                 except Exception:
                     pass
             await show_folder_management(client, message.chat.id, None, series_id, section_id, library_skip=library_skip)
