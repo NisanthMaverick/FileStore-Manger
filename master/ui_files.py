@@ -130,10 +130,16 @@ async def show_folder_management(client: Client, chat_id: int, message_id: int, 
         else:
             await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
     except Exception as e:
+        print(f"Error editing message in show_folder_management: {e}")
+        try:
+            if message_id:
+                await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+        except Exception as del_err:
+            print(f"Error deleting message in show_folder_management: {del_err}")
         try:
             await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-        except Exception as e2:
-            print(f"Error rendering folder_management: {e2}")
+        except Exception as send_err:
+            print(f"Error sending message in show_folder_management: {send_err}")
 
 async def show_series_browse(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int = None, library_skip: int = 0):
     series = await database.get_series(series_id)
@@ -393,6 +399,14 @@ async def show_manage_series_journey(client: Client, chat_id: int, message_id: i
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
         print(f"Error rendering show_manage_series_journey: {e}")
+        try:
+            await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+        except Exception as del_err:
+            print(f"Error deleting message in show_manage_series_journey: {del_err}")
+        try:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as send_err:
+            print(f"Error sending message in show_manage_series_journey: {send_err}")
 
 async def show_journey_lock_settings(client: Client, chat_id: int, message_id: int, journey_id: int):
     journey = await database.get_journey(journey_id)
@@ -642,6 +656,14 @@ async def show_filesec_actions(client: Client, chat_id: int, message_id: int, se
         await client.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     except Exception as e:
         print(f"Error rendering filesec_actions: {e}")
+        try:
+            await client.delete_messages(chat_id=chat_id, message_ids=[message_id])
+        except Exception as del_err:
+            print(f"Error deleting message in show_filesec_actions: {del_err}")
+        try:
+            await client.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+        except Exception as send_err:
+            print(f"Error sending message in show_filesec_actions: {send_err}")
 
 async def show_move_folder_menu(client: Client, chat_id: int, message_id: int, series_id: int, section_id: int, skip: int = 0, library_skip: int = 0):
     series = await database.get_series(series_id)

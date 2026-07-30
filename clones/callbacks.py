@@ -400,7 +400,18 @@ async def clone_callback_handler(client: Client, callback: CallbackQuery):
             buttons.append(pag_row)
             
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="cl_browse_series_0")])
-        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        try:
+            await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as e:
+            print(f"Error editing message in cl_journey: {e}")
+            try:
+                await client.delete_messages(chat_id=callback.message.chat.id, message_ids=[callback.message.id])
+            except Exception as del_err:
+                print(f"Error deleting message in cl_journey: {del_err}")
+            try:
+                await client.send_message(chat_id=callback.message.chat.id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception as send_err:
+                print(f"Error sending message in cl_journey: {send_err}")
 
     elif data == "cl_welcome_home":
         await callback.answer()
